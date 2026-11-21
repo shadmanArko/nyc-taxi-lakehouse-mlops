@@ -1,6 +1,6 @@
 # ADR-0005: SeaweedFS for self-hosted object storage
 
-- **Status:** Accepted (deployment pending server-operator approval)
+- **Status:** Accepted, deployed (2026-11-21)
 - **Date:** 2026-11-21
 
 ## Context
@@ -39,6 +39,9 @@ developer's local DVC config, never in Git.
   credentials were refused with 403.
 - With boto3 ≥ 1.36, clients must set `AWS_REQUEST_CHECKSUM_CALCULATION=when_required`
   and `AWS_RESPONSE_CHECKSUM_VALIDATION=when_required` for non-AWS stores.
-- Until the server deployment is approved, DVC uses a local filesystem remote configured
-  only in the developer's `.dvc/config.local`; the committed default remote is `homelab`.
+- Deployed on the server after operator review: healthy, S3 on loopback only, anonymous and
+  wrong-key requests refused (403), and the `dvc` identity cannot see `taxi-mlflow`. Clients
+  reach it through the existing SSH tunnel; `dvc push` from the laptop reports in sync.
+- Client credentials live in a named AWS profile (`~/.aws/credentials`, mode 600) referenced
+  from `.dvc/config.local`; the checksum settings go in the same profile in `~/.aws/config`.
 - Swapping to Garage or RustFS later changes only the compose file and remote endpoint.

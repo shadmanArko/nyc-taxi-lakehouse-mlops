@@ -103,7 +103,7 @@ piece can be rewritten or replaced without touching the others. Details:
 ## Roadmap
 
 - [x] **Phase 1 - Foundation:** monorepo, uv workspace, contracts, API skeleton, hardened container, pre-commit, CI, docs/ADRs
-- [x] **Phase 2 - Data platform:** EDA, push ingestion with raw contract, bronze/silver (Lakeflow), gold (dbt, enforced contract), portable quality rules tested on the real data, DVC. Deployed and run on Databricks Free Edition with identical row counts; server object storage pending operator approval.
+- [x] **Phase 2 - Data platform:** EDA, push ingestion with raw contract, bronze/silver (Lakeflow), gold (dbt, enforced contract), portable quality rules tested on the real data, DVC. Deployed and run on Databricks Free Edition with identical row counts; data versions stored on the self-hosted SeaweedFS server.
 - [ ] **Phase 3 - Orchestration:** Airflow DAGs for the whole flow
 - [ ] **Phase 4 - ML:** RF baseline → Optuna → challenger, MLflow tracking, evaluation gate, registry promotion
 - [ ] **Phase 5 - Serving + UI:** API serves the `champion` model, web UI, sample request
