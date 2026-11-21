@@ -14,12 +14,26 @@ dependencies = []
 
 [dependency-groups]
 dev = [
+    "duckdb>=2.0",
     "httpx2>=2.13",  # starlette's TestClient requires httpx2 (plain httpx is deprecated)
     "mypy>=2.4",
     "pre-commit>=4.7",
     "pytest>=9.2",
     "pytest-cov>=7.1",
+    "pyyaml>=6.0",
     "ruff>=0.17.6",
+    "types-pyyaml>=6.0.12.20261113",
+]
+# Data versioning (DVC with an S3-compatible remote).
+data = ["dvc[s3]>=3.60"]
+# Exploratory analysis (notebooks/). Not installed in any image.
+eda = [
+    "duckdb>=1.4",
+    "ipykernel>=7.0",
+    "jupytext>=1.17",
+    "matplotlib>=3.10",
+    "nbconvert>=7.16",
+    "pandas>=2.3",
 ]
 
 [tool.uv]
@@ -27,7 +41,10 @@ package = false
 required-version = ">=0.13.5"
 
 [tool.uv.workspace]
-members = ["libs/*", "services/*"]
+members = ["libs/*", "services/*", "jobs/*"]
+# transform/dbt is deliberately NOT a member: dbt-databricks pins pydantic<2.13, which
+# conflicts with libs/contracts. It has its own pyproject + uv.lock (ADR-0002).
+exclude = ["transform/dbt"]
 
 # --------------------------------------------------------------------------- #
 # Ruff: lint + format                                                          #
@@ -56,10 +73,12 @@ select = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"**/tests/**" = ["S101", "ARG001"]
+# S608: tests and dev tools build SQL from trusted constants (rule definitions, fixed names).
+"**/tests/**" = ["S101", "ARG001", "S608"]
+"tools/**" = ["S608"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["taxi_contracts", "taxi_api"]
+known-first-party = ["taxi_contracts", "taxi_api", "taxi_ingest", "lakehouse_rules", "conftest"]
 
 # --------------------------------------------------------------------------- #
 # Mypy: strict type checking                                                   #
@@ -69,10 +88,28 @@ python_version = "3.13"
 strict = true
 warn_unreachable = true
 plugins = ["pydantic.mypy"]
-files = ["libs", "services"]
+files = [
+    "libs",
+    "services",
+    "jobs",
+    "databricks/src/taxi_pipeline/lakehouse_rules",
+    "databricks/tests",
+    "tests",
+    "tools",
+]
 # Every member has a top-level `tests/` directory; map them to distinct modules.
 explicit_package_bases = true
-mypy_path = ["libs/contracts/src", "services/api/src"]
+mypy_path = [
+    "libs/contracts/src",
+    "services/api/src",
+    "jobs/ingest/src",
+    "databricks/src/taxi_pipeline",
+    "databricks/tests",
+]
+
+[[tool.mypy.overrides]]
+module = ["pyarrow", "pyarrow.*"]  # ships no type stubs
+ignore_missing_imports = true
 
 [tool.pydantic-mypy]
 init_forbid_extra = true
@@ -83,7 +120,8 @@ warn_required_dynamic_aliases = true
 # Pytest + coverage                                                            #
 # --------------------------------------------------------------------------- #
 [tool.pytest.ini_options]
-testpaths = ["libs", "services"]
+testpaths = ["libs", "services", "jobs", "databricks/tests", "tests"]
+pythonpath = ["databricks/src/taxi_pipeline", "databricks/tests"]
 addopts = [
     "--import-mode=importlib",
     "--strict-markers",
@@ -95,7 +133,7 @@ filterwarnings = ["error"]
 
 [tool.coverage.run]
 branch = true
-source = ["taxi_contracts", "taxi_api"]
+source = ["taxi_contracts", "taxi_api", "taxi_ingest", "lakehouse_rules"]
 
 [tool.coverage.report]
 fail_under = 85

@@ -1,0 +1,36 @@
+# One job = one refresh of the lakehouse: bronze/silver (Lakeflow), then gold (dbt).
+# Airflow (Phase 3) triggers this job by name and waits for it; it is not scheduled here.
+resources:
+  jobs:
+    taxi_medallion_refresh:
+      name: taxi-medallion-refresh
+      max_concurrent_runs: 1
+      timeout_seconds: 3600
+
+      tasks:
+        - task_key: bronze_silver
+          pipeline_task:
+            pipeline_id: ${resources.pipelines.taxi_medallion.id}
+            full_refresh: false
+
+        - task_key: gold_dbt
+          depends_on:
+            - task_key: bronze_silver
+          environment_key: dbt
+          dbt_task:
+            project_directory: ../../transform/dbt
+            warehouse_id: ${var.warehouse_id}
+            catalog: ${var.catalog}
+            schema: ${resources.schemas.gold.name}
+            commands:
+              - dbt deps
+              - >-
+                dbt build --exclude resource_type:seed
+                --vars '{catalog: ${var.catalog}, silver_schema: ${resources.schemas.silver.name}, min_gold_rows: ${var.min_gold_rows}}'
+
+      environments:
+        - environment_key: dbt
+          spec:
+            environment_version: "4"
+            dependencies:
+              - dbt-databricks>=1.13.1,<1.14

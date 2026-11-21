@@ -226,8 +226,10 @@ __marimo__/
 # Project-specific
 # ---------------------------------------------------------------------------
 # Data never goes into Git: raw/derived data is versioned with DVC + object storage.
-data/
-!data/**/*.dvc
+/data/**
+!/data/**/
+!/data/**/*.dvc
+!/data/**/.gitignore
 *.parquet
 *.csv
 # ML artifacts and local tracking stores

@@ -1,0 +1,6 @@
+[core]
+    autostage = true
+    remote = homelab
+['remote "homelab"']
+    url = s3://taxi-dvc/store
+    endpointurl = http://127.0.0.1:8333

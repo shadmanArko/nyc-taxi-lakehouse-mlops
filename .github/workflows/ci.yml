@@ -149,11 +149,59 @@ jobs:
         with:
           fail-on-severity: high
 
+  dbt:
+    name: dbt gold layer (DuckDB - contract, data tests, unit tests)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: transform/dbt
+    env:
+      DBT_PROFILES_DIR: .
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+          cache-dependency-glob: transform/dbt/uv.lock
+      - run: uv sync  # dbt has its own project + lock (ADR-0002)
+      - run: uv run dbt deps
+      - run: uv run dbt parse --target databricks  # Databricks target compiles (no connection)
+        env:
+          DATABRICKS_HOST: example.cloud.databricks.com
+          DATABRICKS_HTTP_PATH: /sql/1.0/warehouses/ci
+          DATABRICKS_TOKEN: not-a-real-token
+      - run: uv run dbt seed --target ci
+      - run: uv run dbt build --target ci --exclude resource_type:seed
+
+  bundle:
+    name: Databricks bundle validate (when workspace secrets exist)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    env:
+      DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
+      DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: databricks/setup-cli@12452ad4003a2dd61d5a7cee30bc068f750a2e00 # v1.27.0
+      - name: Validate (skipped without credentials, e.g. on fork PRs)
+        run: |
+          if [ -z "$DATABRICKS_HOST" ] || [ -z "$DATABRICKS_TOKEN" ]; then
+            echo "::notice::No Databricks secrets configured; bundle validation skipped."
+            exit 0
+          fi
+          databricks bundle validate -t dev --strict
+
   # Single required status check for branch protection: green only if every job passed.
   ci-ok:
     name: ci-ok
     if: always()
-    needs: [hooks, typecheck, test, api-image, dependency-review]
+    needs: [hooks, typecheck, test, api-image, dependency-review, dbt, bundle]
     runs-on: ubuntu-24.04
     timeout-minutes: 2
     steps:

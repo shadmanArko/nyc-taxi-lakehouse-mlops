@@ -1,0 +1,17 @@
+version: 2
+
+sources:
+  - name: silver
+    description: Silver layer produced by the Lakeflow pipeline (databricks/).
+    database: "{{ var('catalog') if target.type != 'duckdb' else target.database }}"
+    schema: "{{ var('silver_schema') if target.type != 'duckdb' else target.schema }}"
+    tables:
+      - name: yellow_trips
+        description: >
+          Typed, de-duplicated NYC yellow taxi trips with silver quality rules applied
+          (databricks/src/taxi_pipeline/lakehouse_rules/quality.py).
+        columns:
+          - name: pickup_datetime
+            data_tests: [not_null]
+          - name: duration_min
+            data_tests: [not_null]

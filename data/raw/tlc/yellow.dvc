@@ -1,0 +1,6 @@
+outs:
+- md5: 7fe10edfc813af8636efd38a873765b1.dir
+  size: 59159196
+  nfiles: 2
+  hash: md5
+  path: yellow

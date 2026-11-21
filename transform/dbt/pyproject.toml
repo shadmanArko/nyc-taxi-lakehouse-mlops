@@ -1,0 +1,15 @@
+# dbt project environment. Not a Python package: it only pins dbt and its adapters.
+#   databricks: real gold layer on the Databricks SQL warehouse
+#   duckdb:     CI/local target, runs every model, test and unit test on fixtures
+[project]
+name = "taxi-dbt"
+version = "0.1.0"
+requires-python = ">=3.13,<3.14"
+dependencies = [
+    "dbt-core>=1.12,<1.13",
+    "dbt-databricks>=1.13.1",
+    "dbt-duckdb>=1.10",
+]
+
+[tool.uv]
+package = false

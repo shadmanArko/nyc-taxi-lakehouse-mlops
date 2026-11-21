@@ -30,3 +30,11 @@ one CI pipeline and consistent tooling.
   is that two components cannot pin conflicting versions of the same library. If that ever
   happens, the component moves out of the workspace (it already has its own pyproject).
 - Contract changes are explicit: the version constant and tests make breaking changes visible.
+
+## Update (Phase 2)
+
+The anticipated conflict happened: `dbt-databricks` pins `pydantic<2.13`, while
+`libs/contracts` needs `>=2.14`. As planned, `transform/dbt` left the workspace and has
+its own `pyproject.toml` and `uv.lock`. Nothing else changed, because dbt never imported
+workspace code; the gold contract is shared through a test that compares the dbt model
+YAML with `libs/contracts` (`tests/test_cross_component_contracts.py`).

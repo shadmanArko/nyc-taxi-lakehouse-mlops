@@ -21,15 +21,19 @@
 | Web UI | Self-hosted server (container) | Form for end users, calls the API | 5 |
 | Monitoring | Self-hosted server | Data and prediction drift reports | 7 |
 
-Databricks Free Edition cannot reach a private server, so data crosses the boundary
-**outbound from the server**: the server pulls the gold table through the Databricks SQL
-connector and snapshots it with DVC. See [ADR-0003](adr/0003-hybrid-databricks-and-self-hosted.md).
+Databricks Free Edition cannot reach a private server, and its outbound internet is
+limited to an allowlist, so data always crosses the boundary **from our side**: the
+ingest job *pushes* raw files into a Unity Catalog landing volume
+([ADR-0006](adr/0006-push-ingestion-and-portable-quality-rules.md)), and later the server
+*pulls* the gold table through the Databricks SQL connector and snapshots it with DVC
+([ADR-0003](adr/0003-hybrid-databricks-and-self-hosted.md)).
 
 ## Contracts (the only coupling)
 
 | Producer → consumer | Contract | Where it is defined | Change rule |
 |---|---|---|---|
-| Lakehouse → training | Gold table `taxi.gold.trip_features` schema + dbt tests | `transform/dbt` (Phase 2) | Additive changes only; breaking change = new table version |
+| TLC → lakehouse | Raw file contract `RAW_YELLOW_REQUIRED` (columns by type family) + manifest | [`libs/contracts`](../libs/contracts), `jobs/ingest` | A file that fails it never lands |
+| Lakehouse → training | Gold table `<catalog>.taxi_gold.trip_features`, enforced dbt contract = `GOLD_TRIP_FEATURES` | `transform/dbt`, [`libs/contracts`](../libs/contracts) | Additive changes only; a test keeps dbt and Python equal |
 | Training → serving | MLflow registered model `taxi-trip-duration`, alias `champion`, pyfunc signature | MLflow (Phase 4) | Promotion only through the evaluation gate |
 | Serving → clients | `TripFeatures` / `PredictionResponse` | [`libs/contracts`](../libs/contracts) | Semver: `CONTRACT_VERSION`; breaking = major bump |
 | Orchestrator → everything | Container images + CLI entry points | each component's Dockerfile | Images are versioned and pinned |
@@ -48,7 +52,8 @@ sequenceDiagram
     participant ML as MLflow
     participant API as API
 
-    AF->>DBX: run Lakeflow pipeline (bronze, silver) and dbt (gold)
+    AF->>DBX: ingest job uploads verified month to landing volume
+    AF->>DBX: run job: Lakeflow pipeline (bronze, silver), then dbt (gold)
     DBX-->>AF: success + row counts / test results
     AF->>OS: pull gold snapshot, dvc add + push (data version = git commit)
     AF->>TR: train(data_version)

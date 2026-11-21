@@ -1,0 +1,18 @@
+# Lakeflow (Spark Declarative) pipeline: landing volume -> bronze -> silver.
+resources:
+  pipelines:
+    taxi_medallion:
+      name: taxi-medallion
+      catalog: ${var.catalog}
+      schema: ${resources.schemas.bronze.name}   # default; tables use fully qualified names
+      serverless: true
+      channel: CURRENT
+      root_path: ../src/taxi_pipeline            # on sys.path: makes lakehouse_rules importable
+      libraries:
+        - glob:
+            include: ../src/taxi_pipeline/transformations/**
+      configuration:
+        taxi.catalog: ${var.catalog}
+        taxi.bronze_schema: ${resources.schemas.bronze.name}
+        taxi.silver_schema: ${resources.schemas.silver.name}
+        taxi.landing_path: /Volumes/${var.catalog}/${resources.schemas.raw.name}/${resources.volumes.landing.name}/yellow

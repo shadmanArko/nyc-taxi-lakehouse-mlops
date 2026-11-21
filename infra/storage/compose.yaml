@@ -1,0 +1,58 @@
+# S3-compatible object storage for DVC (data versions) and MLflow (model artifacts).
+# SeaweedFS single node: ADR-0005. Deployed on the server as its own Compose project.
+#
+#   STORAGE_DATA_DIR=/path/on/data/disk  STORAGE_S3_CONFIG=/path/to/s3.json \
+#     docker compose -f infra/storage/compose.yaml up -d --wait
+#
+# Only the S3 API is published, on loopback. Clients reach it through an SSH tunnel.
+
+name: taxi-storage
+
+secrets:
+  seaweedfs_s3:
+    file: ${STORAGE_S3_CONFIG:?path to the S3 identities file (see s3.example.json)}
+
+services:
+  seaweedfs:
+    image: chrislusf/seaweedfs:4.54@sha256:4b42c212543a0acd4c0e675215ecdcaf62a186ef98def76c7e12701871222d15
+    user: "10001:10001"
+    command:
+      - server
+      - -dir=/data
+      - -ip=127.0.0.1
+      - -ip.bind=0.0.0.0
+      - -master.volumeSizeLimitMB=1024
+      - -volume.max=0
+      - -s3
+      - -s3.port=8333
+      - -s3.config=/run/secrets/seaweedfs_s3
+    secrets: [seaweedfs_s3]
+    volumes:
+      - ${STORAGE_DATA_DIR:?host directory for object data, owned by 10001:10001}:/data
+    ports:
+      - "127.0.0.1:${STORAGE_S3_PORT:-8333}:8333"   # S3 API only; master/volume/filer stay internal
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    cpus: 1.0
+    mem_limit: 1g
+    pids_limit: 256
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:9333/cluster/healthz"]
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks: [storage]
+
+networks:
+  storage:
+    name: taxi-storage

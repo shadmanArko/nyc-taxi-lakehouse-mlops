@@ -8,7 +8,7 @@ and serve predictions with FastAPI.
 
 | # | Requirement | Where it is met | Status |
 |---|---|---|---|
-| 1 | Load and clean January 2025 yellow taxi data; target `duration` | Lakehouse bronze/silver/gold (Phase 2) | Planned |
+| 1 | Load and clean January 2025 yellow taxi data; target `duration` | EDA notebook, ingest job, Lakeflow bronze/silver, dbt gold (`duration_min`) | Done (Phase 2) |
 | 2 | Train/validation split | Training job (Phase 4) | Planned |
 | 3 | Train a scikit-learn `RandomForestRegressor` | Training job, baseline model (Phase 4) | Planned |
 | 4 | Evaluate with RMSE, log runs to MLflow | Training job + MLflow (Phase 4) | Planned |

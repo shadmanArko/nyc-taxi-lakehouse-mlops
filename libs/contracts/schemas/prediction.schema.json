@@ -3,7 +3,7 @@
     "description": "Prediction plus the lineage a caller needs to trust or debug it.",
     "properties": {
       "contract_version": {
-        "default": "1.0.0",
+        "default": "1.1.0",
         "title": "Contract Version",
         "type": "string"
       },
@@ -91,5 +91,5 @@
     "title": "TripFeatures",
     "type": "object"
   },
-  "contract_version": "1.0.0"
+  "contract_version": "1.1.0"
 }

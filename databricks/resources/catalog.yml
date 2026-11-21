@@ -1,0 +1,28 @@
+# Unity Catalog objects: one schema per medallion layer, plus the landing volume
+# that the ingest job (jobs/ingest) uploads raw TLC files into.
+resources:
+  schemas:
+    raw:
+      catalog_name: ${var.catalog}
+      name: taxi_raw
+      comment: Landing zone for raw NYC TLC files (volume), pushed by jobs/ingest.
+    bronze:
+      catalog_name: ${var.catalog}
+      name: taxi_bronze
+      comment: Raw trips as delivered, append-only, with lineage columns.
+    silver:
+      catalog_name: ${var.catalog}
+      name: taxi_silver
+      comment: Typed, de-duplicated, quality-checked trips.
+    gold:
+      catalog_name: ${var.catalog}
+      name: taxi_gold
+      comment: ML-ready feature tables (dbt, contract-enforced).
+
+  volumes:
+    landing:
+      catalog_name: ${var.catalog}
+      schema_name: ${resources.schemas.raw.name}
+      name: landing
+      volume_type: MANAGED
+      comment: Monthly TLC parquet files under yellow/; manifests under yellow/_manifests/.

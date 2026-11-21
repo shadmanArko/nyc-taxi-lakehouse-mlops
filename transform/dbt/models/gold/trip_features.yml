@@ -1,0 +1,102 @@
+version: 2
+
+models:
+  - name: trip_features
+    description: >
+      ML feature table: one row per cleaned NYC yellow taxi trip, features known at
+      pickup time plus the target `duration_min`. Contract mirrors
+      libs/contracts GOLD_TRIP_FEATURES (kept equal by tests/test_dbt_contract.py).
+    config:
+      contract: {enforced: true}
+    data_tests:
+      - dbt_expectations.expect_table_row_count_to_be_between:
+          arguments:
+            min_value: "{{ var('min_gold_rows') }}"
+    columns:
+      - name: trip_id
+        data_type: string
+        description: Deterministic hash of the trip key (vendor, timestamps, zones, distance).
+        constraints: [{type: not_null}]
+        data_tests: [unique, not_null]
+      - name: source_month
+        data_type: date
+        constraints: [{type: not_null}]
+        data_tests: [not_null]
+      - name: pickup_datetime
+        data_type: timestamp
+        description: NYC local wall-clock time, as recorded by the TLC.
+        constraints: [{type: not_null}]
+        data_tests: [not_null]
+      - name: pickup_date
+        data_type: date
+        data_tests: [not_null]
+      - name: pickup_hour
+        data_type: int
+        data_tests:
+          - not_null
+          - dbt_utils.accepted_range: {arguments: {min_value: 0, max_value: 23}}
+      - name: pickup_day_of_week
+        data_type: int
+        description: ISO day of week, 1 = Monday ... 7 = Sunday.
+        data_tests:
+          - not_null
+          - dbt_utils.accepted_range: {arguments: {min_value: 1, max_value: 7}}
+      - name: is_weekend
+        data_type: boolean
+        data_tests: [not_null]
+      - name: pickup_location_id
+        data_type: int
+        data_tests:
+          - not_null
+          - dbt_utils.accepted_range: {arguments: {min_value: 1, max_value: 263}}
+      - name: dropoff_location_id
+        data_type: int
+        data_tests:
+          - not_null
+          - dbt_utils.accepted_range: {arguments: {min_value: 1, max_value: 263}}
+      - name: trip_distance
+        data_type: double
+        description: Miles.
+        data_tests:
+          - not_null
+          - dbt_utils.accepted_range: {arguments: {min_value: 0, max_value: 100, inclusive: false}}
+      - name: is_metadata_missing
+        data_type: boolean
+        description: Row belongs to the cohort with NULL passenger/rate/payment metadata (EDA s2b).
+        data_tests: [not_null]
+      - name: duration_min
+        data_type: double
+        description: TARGET. Trip duration in minutes; never use as a feature.
+        constraints: [{type: not_null}]
+        data_tests:
+          - not_null
+          - dbt_utils.accepted_range: {arguments: {min_value: 1, max_value: 120}}
+
+unit_tests:
+  - name: weekday_mapping_is_iso_on_every_engine
+    description: Monday = 1 and Sunday = 7, and weekend means Saturday/Sunday.
+    model: trip_features
+    given:
+      - input: source('silver', 'yellow_trips')
+        rows:
+          - {vendor_id: 2, pickup_datetime: "2025-01-13 08:00:00", dropoff_datetime: "2025-01-13 08:10:00", pickup_location_id: 161, dropoff_location_id: 237, trip_distance: 1.5, source_month: "2025-01-01", is_metadata_missing: false, duration_min: 10.0}
+          - {vendor_id: 2, pickup_datetime: "2025-01-18 23:30:00", dropoff_datetime: "2025-01-18 23:45:00", pickup_location_id: 161, dropoff_location_id: 237, trip_distance: 2.0, source_month: "2025-01-01", is_metadata_missing: false, duration_min: 15.0}
+          - {vendor_id: 2, pickup_datetime: "2025-01-19 00:15:00", dropoff_datetime: "2025-01-19 00:35:00", pickup_location_id: 161, dropoff_location_id: 237, trip_distance: 3.0, source_month: "2025-01-01", is_metadata_missing: true, duration_min: 20.0}
+    expect:
+      rows:
+        - {pickup_hour: 8, pickup_day_of_week: 1, is_weekend: false, duration_min: 10.0}
+        - {pickup_hour: 23, pickup_day_of_week: 6, is_weekend: true, duration_min: 15.0}
+        - {pickup_hour: 0, pickup_day_of_week: 7, is_weekend: true, duration_min: 20.0}
+
+  - name: unknown_zones_are_excluded
+    description: Rule R7 - zones 264/265 never reach gold, on either end of the trip.
+    model: trip_features
+    given:
+      - input: source('silver', 'yellow_trips')
+        rows:
+          - {vendor_id: 1, pickup_datetime: "2025-01-14 10:00:00", dropoff_datetime: "2025-01-14 10:10:00", pickup_location_id: 100, dropoff_location_id: 200, trip_distance: 1.0, source_month: "2025-01-01", is_metadata_missing: false, duration_min: 10.0}
+          - {vendor_id: 1, pickup_datetime: "2025-01-14 11:00:00", dropoff_datetime: "2025-01-14 11:10:00", pickup_location_id: 264, dropoff_location_id: 200, trip_distance: 1.0, source_month: "2025-01-01", is_metadata_missing: false, duration_min: 10.0}
+          - {vendor_id: 1, pickup_datetime: "2025-01-14 12:00:00", dropoff_datetime: "2025-01-14 12:10:00", pickup_location_id: 100, dropoff_location_id: 265, trip_distance: 1.0, source_month: "2025-01-01", is_metadata_missing: false, duration_min: 10.0}
+    expect:
+      rows:
+        - {pickup_location_id: 100, dropoff_location_id: 200}

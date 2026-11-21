@@ -35,7 +35,12 @@ LABEL org.opencontainers.image.title="taxi-api" \
       org.opencontainers.image.source="https://github.com/shadmanArko/nyc-taxi-lakehouse-mlops" \
       org.opencontainers.image.licenses="MIT"
 
-RUN groupadd --system --gid 10001 app \
+# Apply Debian security fixes published after the pinned base was built (the CI image
+# scan fails on fixable high/critical CVEs), then create the unprivileged user.
+RUN apt-get update \
+    && apt-get upgrade -y --no-install-recommends \
+    && rm -rf /var/lib/apt/lists/* \
+    && groupadd --system --gid 10001 app \
     && useradd --system --uid 10001 --gid app --no-create-home --shell /usr/sbin/nologin app
 
 COPY --from=builder --chown=root:root /app/.venv /app/.venv

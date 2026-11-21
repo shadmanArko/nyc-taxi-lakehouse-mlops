@@ -1,0 +1,49 @@
+# Declarative Automation Bundle (formerly Databricks Asset Bundles) for the lakehouse.
+#   databricks bundle validate            # needs workspace auth
+#   databricks bundle deploy  -t dev
+#   databricks bundle run taxi_medallion_refresh -t dev
+# Everything is serverless (Databricks Free Edition has no classic compute).
+bundle:
+  name: taxi_lakehouse
+
+include:
+  - databricks/resources/*.yml
+
+# Only the pipeline source and the dbt project need to reach the workspace.
+sync:
+  exclude:
+    - ".github/**"
+    - "data/**"
+    - "docs/**"
+    - "infra/**"
+    - "jobs/**"
+    - "libs/**"
+    - "notebooks/**"
+    - "services/**"
+    - "tools/**"
+    - "databricks/tests/**"
+    - "transform/dbt/target/**"
+    - "transform/dbt/dbt_packages/**"
+
+variables:
+  catalog:
+    description: Unity Catalog catalog. Free Edition provides `workspace`.
+    default: workspace
+  warehouse_id:
+    description: SQL warehouse that runs dbt (Free Edition has exactly one).
+    lookup:
+      warehouse: Serverless Starter Warehouse
+  min_gold_rows:
+    description: Gold volume test floor. One real month is ~3.3M rows.
+    default: 1000000
+
+targets:
+  dev:
+    mode: development
+    default: true
+    presets:
+      name_prefix: "dev_"   # schemas become dev_taxi_bronze, ... (isolated from prod)
+  prod:
+    mode: production
+    workspace:
+      root_path: /Workspace/Users/${workspace.current_user.userName}/.bundle/${bundle.name}/${bundle.target}

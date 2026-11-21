@@ -15,7 +15,7 @@ from typing import Annotated, Final
 
 from pydantic import AfterValidator, BaseModel, ConfigDict, Field, NaiveDatetime
 
-CONTRACT_VERSION: Final = "1.0.0"
+CONTRACT_VERSION: Final = "1.1.0"
 
 # NYC TLC taxi zone IDs: 1-263 are real zones, 264/265 are "Unknown"/"Outside NYC".
 MIN_LOCATION_ID: Final = 1

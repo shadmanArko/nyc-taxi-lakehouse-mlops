@@ -1,0 +1,20 @@
+[project]
+name = "taxi-ingest"
+version = "0.1.0"
+description = "Fetch NYC TLC monthly trip files, verify them, and land them in the lakehouse"
+requires-python = ">=3.13,<3.14"
+dependencies = [
+    "databricks-sdk>=0.169",
+    "pyarrow>=22.0",
+    "taxi-contracts",
+]
+
+[project.scripts]
+taxi-ingest = "taxi_ingest.cli:main"
+
+[tool.uv.sources]
+taxi-contracts = { workspace = true }
+
+[build-system]
+requires = ["uv_build>=0.13.0,<0.14"]
+build-backend = "uv_build"

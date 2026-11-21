@@ -1,0 +1,14 @@
+{
+  "identities": [
+    {
+      "name": "dvc",
+      "credentials": [{ "accessKey": "REPLACE_ME", "secretKey": "REPLACE_ME" }],
+      "actions": ["Read:taxi-dvc", "Write:taxi-dvc", "List:taxi-dvc", "Tagging:taxi-dvc"]
+    },
+    {
+      "name": "mlflow",
+      "credentials": [{ "accessKey": "REPLACE_ME", "secretKey": "REPLACE_ME" }],
+      "actions": ["Read:taxi-mlflow", "Write:taxi-mlflow", "List:taxi-mlflow", "Tagging:taxi-mlflow"]
+    }
+  ]
+}

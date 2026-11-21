@@ -6,5 +6,7 @@
 | [0002](0002-monorepo-with-contract-based-coupling.md) | Monorepo with contract-based coupling | Accepted |
 | [0003](0003-hybrid-databricks-and-self-hosted.md) | Hybrid platform: Databricks for the lakehouse, self-hosted for the rest | Accepted |
 | [0004](0004-public-exposure-via-tunnel.md) | Public exposure through an outbound tunnel, no open ports | Proposed |
+| [0005](0005-seaweedfs-object-storage.md) | SeaweedFS for self-hosted object storage | Accepted |
+| [0006](0006-push-ingestion-and-portable-quality-rules.md) | Push-based ingestion and engine-portable quality rules | Accepted |
 
 Template: copy the newest ADR, bump the number, keep Context / Decision / Consequences.

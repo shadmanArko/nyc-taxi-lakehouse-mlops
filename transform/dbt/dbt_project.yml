@@ -1,0 +1,50 @@
+name: taxi
+version: "0.1.0"
+config-version: 2
+profile: taxi
+
+model-paths: ["models"]
+macro-paths: ["macros"]
+seed-paths: ["seeds"]
+test-paths: ["tests"]
+clean-targets: ["target", "dbt_packages"]
+
+vars:
+  # Where silver lives. On Databricks the bundle passes the deployed schema names;
+  # on DuckDB (CI) the fixture seed is the silver source.
+  # Gold is written to the target's schema (the job's/profile's schema), not a var.
+  catalog: workspace
+  silver_schema: taxi_silver
+  # Minimum gold rows for the volume test: 1 on fixtures, ~3M on a real month.
+  min_gold_rows: 1
+
+flags:
+  require_explicit_package_overrides_for_builtin_materializations: true
+
+models:
+  taxi:
+    gold:
+      +materialized: table
+      +tags: ["gold"]
+
+seeds:
+  taxi:
+    ci:
+      # Fixture of the silver table, only for the DuckDB target.
+      +enabled: "{{ target.type == 'duckdb' }}"
+      +column_types:
+        vendor_id: integer
+        pickup_datetime: timestamp
+        dropoff_datetime: timestamp
+        passenger_count: integer
+        trip_distance: double
+        rate_code_id: integer
+        pickup_location_id: integer
+        dropoff_location_id: integer
+        payment_type: integer
+        fare_amount: double
+        total_amount: double
+        duration_min: double
+        source_month: date
+        is_metadata_missing: boolean
+        _ingested_at: timestamp
