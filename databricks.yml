@@ -22,8 +22,8 @@ sync:
     - "services/**"
     - "tools/**"
     - "databricks/tests/**"
-    - "transform/dbt/target/**"
-    - "transform/dbt/dbt_packages/**"
+  # dbt's target/ and dbt_packages/ are gitignored, which bundle sync already respects.
+  # (Listing them here breaks `validate --strict` on clean checkouts where they don't exist.)
 
 variables:
   catalog:
