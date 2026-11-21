@@ -4,6 +4,8 @@
 !uv.lock
 !libs/**
 !services/**
+!jobs/**
+!orchestration/airflow/dags/**
 # ...but never tests, caches or local junk
 **/tests/
 **/__pycache__/

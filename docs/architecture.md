@@ -55,9 +55,9 @@ sequenceDiagram
     AF->>DBX: ingest job uploads verified month to landing volume
     AF->>DBX: run job: Lakeflow pipeline (bronze, silver), then dbt (gold)
     DBX-->>AF: success + row counts / test results
-    AF->>OS: pull gold snapshot, dvc add + push (data version = git commit)
-    AF->>TR: train(data_version)
-    TR->>ML: log params, metrics, model, data version
+    AF->>OS: export gold month, check contract, publish <sha256>.parquet + manifest
+    AF->>TR: train(snapshot sha256)
+    TR->>ML: log params, metrics, model, snapshot sha256
     TR->>ML: register candidate
     AF->>ML: evaluation gate: candidate beats champion?
     ML-->>API: champion alias moves, API reloads

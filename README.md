@@ -34,7 +34,6 @@ flowchart LR
     subgraph HL[Self-hosted server]
         AF{{Airflow<br/>orchestration}}
         OS[(S3-compatible<br/>object storage)]
-        DVC[DVC<br/>data snapshots]
         TR[Training job<br/>RF baseline, Optuna, challenger]
         ML[(MLflow<br/>tracking + registry)]
         API[FastAPI<br/>/predict]
@@ -43,7 +42,7 @@ flowchart LR
     end
 
     TLC --> ING -- push --> L
-    G -- gold snapshot --> DVC --> OS
+    G -- content-addressed<br/>gold snapshot --> OS
     OS --> TR --> ML
     ML -- champion alias --> API --> WEB
     API --> MON
@@ -66,8 +65,8 @@ piece can be rewritten or replaced without touching the others. Details:
 | Ingestion | Push-based ingest job (verify against raw contract, manifest, DVC) → UC landing volume → Auto Loader |
 | Bronze → silver | Lakeflow (Spark Declarative) Pipelines with data-quality expectations |
 | Silver → gold (ELT) | dbt (`dbt-databricks`), enforced model contract, data tests, unit tests (CI on DuckDB) |
-| Orchestration | Apache Airflow |
-| Data versioning | DVC on S3-compatible object storage (SeaweedFS, [ADR-0005](docs/adr/0005-seaweedfs-object-storage.md)) |
+| Orchestration | Apache Airflow 3 (LocalExecutor, deferrable Databricks operator, file-based secrets) |
+| Data versioning | DVC for repo data; immutable SHA-256-addressed gold snapshots for orchestrated data; both on S3-compatible object storage (SeaweedFS, [ADR-0005](docs/adr/0005-seaweedfs-object-storage.md)) |
 | Training & tuning | scikit-learn `RandomForestRegressor` baseline, Optuna, gradient-boosting challenger |
 | Experiment tracking & registry | MLflow |
 | Model evaluation gates | Offline metric gates (RMSE vs baseline and vs champion), slice analysis |
@@ -84,6 +83,7 @@ piece can be rewritten or replaced without touching the others. Details:
 .
 ├── libs/contracts/        # versioned schemas shared by all components (the only shared code)
 ├── jobs/ingest/           # TLC download, raw-contract check, manifest, upload to landing volume
+├── jobs/export_gold/      # gold month -> contract check -> content-addressed snapshot
 ├── databricks.yml         # Databricks bundle: schemas, landing volume, pipeline, job
 ├── databricks/            # Lakeflow pipeline (bronze, silver) + portable quality rules + tests
 ├── transform/dbt/         # dbt gold layer (own uv project), contract, tests, unit tests
@@ -95,7 +95,7 @@ piece can be rewritten or replaced without touching the others. Details:
 ├── tests/                 # cross-component contract tests
 ├── docs/                  # architecture, ADRs, deployment, assignment brief
 ├── .github/               # CI workflow, Dependabot, PR template
-├── orchestration/airflow/ # Phase 3: DAGs                              (planned)
+├── orchestration/airflow/ # Airflow 3 DAG, image (jobs in their own venv), local stack, DAG tests
 ├── jobs/training/         # Phase 4: training + evaluation job         (planned)
 └── services/web/          # Phase 5: end-user UI                       (planned)
 ```
@@ -104,7 +104,7 @@ piece can be rewritten or replaced without touching the others. Details:
 
 - [x] **Phase 1 - Foundation:** monorepo, uv workspace, contracts, API skeleton, hardened container, pre-commit, CI, docs/ADRs
 - [x] **Phase 2 - Data platform:** EDA, push ingestion with raw contract, bronze/silver (Lakeflow), gold (dbt, enforced contract), portable quality rules tested on the real data, DVC. Deployed and run on Databricks Free Edition with identical row counts; data versions stored on the self-hosted SeaweedFS server.
-- [ ] **Phase 3 - Orchestration:** Airflow DAGs for the whole flow
+- [x] **Phase 3 - Orchestration:** Airflow 3 DAG (ingest → landing → Databricks job → gold snapshot), deferrable Databricks step, immutable content-addressed snapshots ([ADR-0007](docs/adr/0007-orchestration-and-content-addressed-snapshots.md))
 - [ ] **Phase 4 - ML:** RF baseline → Optuna → challenger, MLflow tracking, evaluation gate, registry promotion
 - [ ] **Phase 5 - Serving + UI:** API serves the `champion` model, web UI, sample request
 - [ ] **Phase 6 - CD + deployment:** images to GHCR, deploy to the server, public HTTPS link
@@ -119,6 +119,7 @@ make setup     # install workspace + dev tools, install git hooks
 make check     # what CI runs except the image jobs: hooks, mypy --strict, tests (coverage ≥ 85%)
 make image     # build the API image for linux/amd64 (CI's api-image job)
 make lakehouse-local  # bronze -> silver -> gold on the real data, locally on DuckDB
+make airflow-bootstrap && make airflow-up && make airflow-run MONTH=2025-01  # orchestrated run
 make up        # build and start the local stack
 make smoke     # /health -> ok, /ready -> 503 until a model exists (Phase 5)
 ```

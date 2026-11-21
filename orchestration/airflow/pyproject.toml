@@ -1,0 +1,23 @@
+# Airflow environment for DAG development and tests. Own project + lock (not a
+# workspace member): Airflow pins hundreds of packages. The runtime image installs
+# the same versions from Airflow's official constraints file.
+[project]
+name = "taxi-airflow"
+version = "0.1.0"
+requires-python = ">=3.13,<3.14"
+dependencies = [
+    "apache-airflow==3.4.0",
+    "apache-airflow-providers-databricks==7.23.0",
+    "apache-airflow-providers-standard==1.21.0",
+]
+
+[dependency-groups]
+dev = ["pytest>=9.2"]
+
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["dags"]
+addopts = ["--strict-markers", "-ra"]

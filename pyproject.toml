@@ -74,11 +74,11 @@ select = [
 
 [tool.ruff.lint.per-file-ignores]
 # S608: tests and dev tools build SQL from trusted constants (rule definitions, fixed names).
-"**/tests/**" = ["S101", "ARG001", "S608"]
+"**/tests/**" = ["S101", "ARG001", "ARG002", "S608"]
 "tools/**" = ["S608"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["taxi_contracts", "taxi_api", "taxi_ingest", "lakehouse_rules", "conftest"]
+known-first-party = ["taxi_contracts", "taxi_api", "taxi_ingest", "taxi_export_gold", "lakehouse_rules", "conftest"]
 
 # --------------------------------------------------------------------------- #
 # Mypy: strict type checking                                                   #
@@ -103,12 +103,13 @@ mypy_path = [
     "libs/contracts/src",
     "services/api/src",
     "jobs/ingest/src",
+    "jobs/export_gold/src",
     "databricks/src/taxi_pipeline",
     "databricks/tests",
 ]
 
 [[tool.mypy.overrides]]
-module = ["pyarrow", "pyarrow.*"]  # ships no type stubs
+module = ["pyarrow", "pyarrow.*", "boto3", "boto3.*", "botocore", "botocore.*"]  # no type stubs
 ignore_missing_imports = true
 
 [tool.pydantic-mypy]
@@ -133,7 +134,7 @@ filterwarnings = ["error"]
 
 [tool.coverage.run]
 branch = true
-source = ["taxi_contracts", "taxi_api", "taxi_ingest", "lakehouse_rules"]
+source = ["taxi_contracts", "taxi_api", "taxi_ingest", "taxi_export_gold", "lakehouse_rules"]
 
 [tool.coverage.report]
 fail_under = 85

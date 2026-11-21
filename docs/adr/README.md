@@ -8,5 +8,6 @@
 | [0004](0004-public-exposure-via-tunnel.md) | Public exposure through an outbound tunnel, no open ports | Proposed |
 | [0005](0005-seaweedfs-object-storage.md) | SeaweedFS for self-hosted object storage | Accepted |
 | [0006](0006-push-ingestion-and-portable-quality-rules.md) | Push-based ingestion and engine-portable quality rules | Accepted |
+| [0007](0007-orchestration-and-content-addressed-snapshots.md) | Airflow orchestration and content-addressed gold snapshots | Accepted |
 
 Template: copy the newest ADR, bump the number, keep Context / Decision / Consequences.

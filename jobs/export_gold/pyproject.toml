@@ -1,0 +1,22 @@
+[project]
+name = "taxi-export-gold"
+version = "0.1.0"
+description = "Export one month of the gold feature table as an immutable, content-addressed snapshot"
+requires-python = ">=3.13,<3.14"
+dependencies = [
+    "boto3>=1.40",  # aiobotocore (dvc-s3) pins botocore; let uv find a common version
+    "databricks-sdk>=0.169",
+    "databricks-sql-connector[pyarrow]>=4.9",
+    "pyarrow>=22.0",
+    "taxi-contracts",
+]
+
+[project.scripts]
+taxi-export-gold = "taxi_export_gold.cli:main"
+
+[tool.uv.sources]
+taxi-contracts = { workspace = true }
+
+[build-system]
+requires = ["uv_build>=0.13.0,<0.14"]
+build-backend = "uv_build"

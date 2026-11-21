@@ -5,7 +5,8 @@ SHELL := /bin/bash
 COMPOSE := docker compose -f infra/compose/compose.yaml
 
 .PHONY: help setup hooks lint format typecheck test check eda data-pull ingest ingest-upload \
-	dbt-ci lakehouse-local bundle-validate bundle-deploy bundle-run image up down logs smoke clean
+	dbt-ci lakehouse-local bundle-validate bundle-deploy bundle-run airflow-test airflow-bootstrap \
+	airflow-up airflow-down airflow-run image up down logs smoke clean
 
 help: ## List available targets
 	@grep -hE '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}'
@@ -77,6 +78,29 @@ bundle-deploy: ## Deploy schemas, volume, pipeline and job
 
 bundle-run: ## Run the lakehouse refresh job (bronze -> silver -> gold)
 	databricks bundle run taxi_medallion_refresh -t $(BUNDLE_TARGET)
+
+# --------------------------------------------------------------------------- #
+# Orchestration (Phase 3)                                                      #
+# --------------------------------------------------------------------------- #
+AIRFLOW := docker compose -f orchestration/airflow/compose.yaml
+AIRFLOW_TEST_HOME := $(CURDIR)/target/airflow-test-home
+
+airflow-test: ## DAG integrity tests (own uv project)
+	mkdir -p $(AIRFLOW_TEST_HOME)
+	cd orchestration/airflow && uv sync -q && AIRFLOW_HOME=$(AIRFLOW_TEST_HOME) uv run pytest -q
+
+airflow-bootstrap: ## Create local .env + connections file (asks for a Databricks token)
+	BUNDLE_TARGET=$(BUNDLE_TARGET) uv run --no-project python orchestration/airflow/bootstrap_local.py
+
+airflow-up: ## Start local Airflow at http://127.0.0.1:8080
+	$(AIRFLOW) up -d --build --wait
+
+airflow-down: ## Stop local Airflow
+	$(AIRFLOW) down
+
+airflow-run: ## Trigger the monthly refresh for MONTH (default 2025-01)
+	$(AIRFLOW) exec airflow-scheduler airflow dags unpause taxi_monthly_refresh
+	$(AIRFLOW) exec airflow-scheduler airflow dags trigger taxi_monthly_refresh -c '{"month": "$(MONTH)"}'
 
 # --------------------------------------------------------------------------- #
 # Serving                                                                      #
