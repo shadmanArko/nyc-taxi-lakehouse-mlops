@@ -232,6 +232,8 @@ __marimo__/
 !/data/**/.gitignore
 *.parquet
 *.csv
+# ...except small, hand-written dbt test fixtures (no real data)
+!transform/dbt/seeds/**/*.csv
 # ML artifacts and local tracking stores
 mlruns/
 mlartifacts/

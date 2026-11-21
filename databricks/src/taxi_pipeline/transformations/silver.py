@@ -21,7 +21,9 @@ SILVER_SCHEMA = spark.conf.get("taxi.silver_schema")
 @dp.materialized_view(
     name=f"{CATALOG}.{SILVER_SCHEMA}.yellow_trips",
     comment="Cleaned NYC yellow taxi trips: typed, one row per trip, quality rules applied.",
-    table_properties={"quality": "silver"},
+    # TLC timestamps carry no timezone (NYC wall-clock time), so Spark reads them as
+    # TIMESTAMP_NTZ; Delta requires that feature to be enabled explicitly.
+    table_properties={"quality": "silver", "delta.feature.timestampNtz": "supported"},
 )
 @dp.expect_all_or_drop(as_expectations(DROP_RULES))
 @dp.expect_all(as_expectations(WARN_RULES))

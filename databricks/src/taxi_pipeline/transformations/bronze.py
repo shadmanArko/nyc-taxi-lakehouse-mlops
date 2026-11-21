@@ -18,13 +18,16 @@ LANDING_PATH = spark.conf.get("taxi.landing_path")  # /Volumes/<catalog>/<schema
 @dp.table(
     name=f"{CATALOG}.{BRONZE_SCHEMA}.yellow_trips",
     comment="Raw NYC TLC yellow taxi trips, one row per source record, append-only.",
-    table_properties={"quality": "bronze"},
+    # TLC timestamps carry no timezone (NYC wall-clock time), so Spark reads them as
+    # TIMESTAMP_NTZ; Delta requires that feature to be enabled explicitly.
+    table_properties={"quality": "bronze", "delta.feature.timestampNtz": "supported"},
 )
 def yellow_trips() -> DataFrame:
     return (
         spark.readStream.format("cloudFiles")
         .option("cloudFiles.format", "parquet")
         .option("cloudFiles.schemaEvolutionMode", "rescue")  # new TLC columns -> _rescued_data
+        .option("pathGlobFilter", "*.parquet")  # never read manifests (_manifests/*.json)
         .load(LANDING_PATH)
         .withColumn("_source_file", F.col("_metadata.file_path"))
         .withColumn("_ingested_at", F.current_timestamp())

@@ -44,8 +44,10 @@ eda: ## Re-execute the EDA notebooks from their .py sources (needs data/ pulled)
 # --------------------------------------------------------------------------- #
 MONTH ?= 2025-01
 BUNDLE_TARGET ?= dev
-# dev target prefixes schemas with dev_ (databricks.yml presets)
-LANDING_VOLUME ?= /Volumes/workspace/$(if $(filter dev,$(BUNDLE_TARGET)),dev_,)taxi_raw/landing/yellow
+# Landing path as the bundle actually resolves it (dev prefixes schemas with dev_<user>_).
+LANDING_VOLUME ?= $(shell databricks bundle summary -t $(BUNDLE_TARGET) -o json 2>/dev/null | \
+	python3 -c "import json,sys; d=json.load(sys.stdin); r=d['resources']; \
+	print('/Volumes/%s/%s/landing/yellow' % (d['variables']['catalog']['value'], r['schemas']['raw']['name']))")
 # Each recipe line is one shell: enter the dbt project once, then chain commands.
 IN_DBT := cd transform/dbt && export DBT_PROFILES_DIR=. && uv sync -q &&
 

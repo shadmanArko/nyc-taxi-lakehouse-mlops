@@ -36,7 +36,11 @@ isolated in an adapter-dispatched macro and pinned by a dbt unit test.
 ## Consequences
 
 - One rule definition, two engines: the real-data test reproduces the EDA funnel exactly
-  (3,475,226 raw → 3,412,187 de-duplicated → 3,312,645 silver → 3,287,442 gold).
+  (3,475,226 raw → 3,412,187 de-duplicated → 3,312,645 silver → 3,287,442 gold), and the
+  deployed Databricks run produced the same counts, including the per-weekday split of gold.
+- Spark reads the TLC's timezone-less timestamps as `TIMESTAMP_NTZ` (correct: NYC wall-clock
+  time), which Delta only stores with the `timestampNtz` table feature enabled; bronze and
+  silver enable it explicitly.
 - The whole medallion flow can be rebuilt locally (`make lakehouse-local`) without a
   Databricks account, which keeps the project reviewable and CI fast.
 - Rules are limited to the shared SQL subset. A rule that needs engine-specific SQL must

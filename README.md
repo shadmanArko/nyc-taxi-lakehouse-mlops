@@ -103,7 +103,7 @@ piece can be rewritten or replaced without touching the others. Details:
 ## Roadmap
 
 - [x] **Phase 1 - Foundation:** monorepo, uv workspace, contracts, API skeleton, hardened container, pre-commit, CI, docs/ADRs
-- [x] **Phase 2 - Data platform:** EDA, push ingestion with raw contract, bronze/silver (Lakeflow), gold (dbt, enforced contract), portable quality rules tested on the real data, DVC. _Databricks deployment and server storage pending (see below)._
+- [x] **Phase 2 - Data platform:** EDA, push ingestion with raw contract, bronze/silver (Lakeflow), gold (dbt, enforced contract), portable quality rules tested on the real data, DVC. Deployed and run on Databricks Free Edition with identical row counts; server object storage pending operator approval.
 - [ ] **Phase 3 - Orchestration:** Airflow DAGs for the whole flow
 - [ ] **Phase 4 - ML:** RF baseline → Optuna → challenger, MLflow tracking, evaluation gate, registry promotion
 - [ ] **Phase 5 - Serving + UI:** API serves the `champion` model, web UI, sample request
@@ -137,7 +137,8 @@ From the [EDA notebook](notebooks/01_eda_yellow_2025_01.ipynb), each turned into
 - **Target window 1-120 min** (not the usual 60): keeps long airport trips, drops meters
   left running (20 trips over a day) and a 276,424-mile "trip".
 - **Funnel:** 3,475,226 raw → 3,412,187 de-duplicated → 3,312,645 silver → 3,287,442 gold.
-  The pipeline's own rules reproduce these numbers exactly in CI-runnable tests.
+  The pipeline's own rules reproduce these numbers exactly in CI-runnable tests, and the
+  deployed Databricks pipeline and dbt job produce the same counts.
 
 ## How work flows
 
