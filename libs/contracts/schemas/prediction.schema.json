@@ -1,0 +1,95 @@
+{
+  "PredictionResponse": {
+    "description": "Prediction plus the lineage a caller needs to trust or debug it.",
+    "properties": {
+      "contract_version": {
+        "default": "1.0.0",
+        "title": "Contract Version",
+        "type": "string"
+      },
+      "model_name": {
+        "examples": [
+          "taxi-trip-duration"
+        ],
+        "title": "Model Name",
+        "type": "string"
+      },
+      "model_version": {
+        "examples": [
+          "3"
+        ],
+        "title": "Model Version",
+        "type": "string"
+      },
+      "predicted_duration_minutes": {
+        "examples": [
+          14.2
+        ],
+        "minimum": 0,
+        "title": "Predicted Duration Minutes",
+        "type": "number"
+      }
+    },
+    "required": [
+      "predicted_duration_minutes",
+      "model_name",
+      "model_version"
+    ],
+    "title": "PredictionResponse",
+    "type": "object"
+  },
+  "TripFeatures": {
+    "additionalProperties": false,
+    "description": "Everything known at the moment a trip starts (no leakage from the dropoff).",
+    "properties": {
+      "dropoff_location_id": {
+        "description": "TLC taxi zone ID where the trip is expected to end.",
+        "examples": [
+          237
+        ],
+        "maximum": 265,
+        "minimum": 1,
+        "title": "Dropoff Location Id",
+        "type": "integer"
+      },
+      "pickup_datetime": {
+        "description": "Pickup time as NYC local wall-clock time, without a timezone offset (the TLC records timestamps this way). Offsets and Unix epochs are rejected so one instant can never reach the model as two different local hours.",
+        "examples": [
+          "2025-01-15T08:30:00"
+        ],
+        "format": "date-time",
+        "title": "Pickup Datetime",
+        "type": "string"
+      },
+      "pickup_location_id": {
+        "description": "TLC taxi zone ID where the trip starts.",
+        "examples": [
+          161
+        ],
+        "maximum": 265,
+        "minimum": 1,
+        "title": "Pickup Location Id",
+        "type": "integer"
+      },
+      "trip_distance": {
+        "description": "Expected trip distance in miles.",
+        "examples": [
+          2.4
+        ],
+        "exclusiveMinimum": 0,
+        "maximum": 100,
+        "title": "Trip Distance",
+        "type": "number"
+      }
+    },
+    "required": [
+      "pickup_location_id",
+      "dropoff_location_id",
+      "trip_distance",
+      "pickup_datetime"
+    ],
+    "title": "TripFeatures",
+    "type": "object"
+  },
+  "contract_version": "1.0.0"
+}

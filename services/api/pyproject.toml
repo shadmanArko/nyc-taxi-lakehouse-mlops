@@ -1,0 +1,22 @@
+[project]
+name = "taxi-api"
+version = "0.1.0"
+description = "Prediction API for NYC taxi trip duration"
+requires-python = ">=3.13,<3.14"
+dependencies = [
+    "fastapi>=0.165",
+    "pydantic-settings>=2.16",
+    "taxi-contracts",
+    # Production server extras only (fast event loop + HTTP parser). Not uvicorn[standard],
+    # which also pulls in reload/websocket/dotenv packages the image never uses.
+    "httptools>=0.7",
+    "uvicorn>=0.54",
+    "uvloop>=0.22; sys_platform != 'win32' and platform_python_implementation != 'PyPy'",
+]
+
+[tool.uv.sources]
+taxi-contracts = { workspace = true }
+
+[build-system]
+requires = ["uv_build>=0.13.0,<0.14"]
+build-backend = "uv_build"

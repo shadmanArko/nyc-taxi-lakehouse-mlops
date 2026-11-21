@@ -1,0 +1,53 @@
+# Local stack. Each phase adds its services here behind a profile.
+#   make up      (or: docker compose -f infra/compose/compose.yaml up -d --build)
+#
+# Hardening mirrors the homelab server's container rules (docs/deployment.md):
+# loopback-only ports, non-root, all capabilities dropped, no-new-privileges,
+# read-only root filesystem, CPU/RAM limits, health check, log rotation.
+
+name: taxi-mlops
+
+x-hardening: &hardening
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: ["no-new-privileges:true"]
+  restart: unless-stopped
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "3"
+
+services:
+  api:
+    <<: *hardening
+    build:
+      context: ../..
+      dockerfile: services/api/Dockerfile
+    image: taxi-api:local
+    environment:
+      TAXI_API_LOG_LEVEL: ${TAXI_API_LOG_LEVEL:-INFO}
+      TAXI_API_MODEL_URI: ${TAXI_API_MODEL_URI:-}
+    ports:
+      # Never 0.0.0.0. The host port is configurable per environment.
+      - "127.0.0.1:${API_HOST_PORT:-8000}:8000"
+    tmpfs:
+      - /tmp:size=16m
+    cpus: 1.0
+    mem_limit: 512m
+    pids_limit: 128
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=4)"
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+    networks: [serving]
+
+networks:
+  serving:
+    name: taxi-mlops-serving

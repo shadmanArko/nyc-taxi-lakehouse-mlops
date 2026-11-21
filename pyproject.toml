@@ -1,0 +1,104 @@
+# Workspace root. It is not a package itself: it only pins shared dev tooling
+# and lists the workspace members. Each member (libs/*, services/*) has its own
+# pyproject.toml, its own dependencies and, where it ships, its own Dockerfile.
+# See docs/adr/0002-monorepo-with-contract-based-coupling.md.
+
+[project]
+name = "nyc-taxi-lakehouse-mlops"
+version = "0.1.0"
+description = "Lakehouse + MLOps platform for NYC Yellow Taxi trip-duration prediction"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.13,<3.14"
+dependencies = []
+
+[dependency-groups]
+dev = [
+    "httpx2>=2.13",  # starlette's TestClient requires httpx2 (plain httpx is deprecated)
+    "mypy>=2.4",
+    "pre-commit>=4.7",
+    "pytest>=9.2",
+    "pytest-cov>=7.1",
+    "ruff>=0.17.6",
+]
+
+[tool.uv]
+package = false
+required-version = ">=0.13.5"
+
+[tool.uv.workspace]
+members = ["libs/*", "services/*"]
+
+# --------------------------------------------------------------------------- #
+# Ruff: lint + format                                                          #
+# --------------------------------------------------------------------------- #
+[tool.ruff]
+target-version = "py313"
+line-length = 100
+extend-exclude = ["notebooks"]
+
+[tool.ruff.lint]
+select = [
+    "E", "W",  # pycodestyle
+    "F",       # pyflakes
+    "I",       # isort
+    "B",       # bugbear
+    "UP",      # pyupgrade
+    "N",       # pep8-naming
+    "S",       # bandit (security)
+    "SIM",     # simplify
+    "C4",      # comprehensions
+    "DTZ",     # naive/aware datetime mistakes (timestamps are core to this data)
+    "PT",      # pytest style
+    "ARG",     # unused arguments
+    "PTH",     # pathlib over os.path
+    "RUF",     # ruff-specific
+]
+
+[tool.ruff.lint.per-file-ignores]
+"**/tests/**" = ["S101", "ARG001"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["taxi_contracts", "taxi_api"]
+
+# --------------------------------------------------------------------------- #
+# Mypy: strict type checking                                                   #
+# --------------------------------------------------------------------------- #
+[tool.mypy]
+python_version = "3.13"
+strict = true
+warn_unreachable = true
+plugins = ["pydantic.mypy"]
+files = ["libs", "services"]
+# Every member has a top-level `tests/` directory; map them to distinct modules.
+explicit_package_bases = true
+mypy_path = ["libs/contracts/src", "services/api/src"]
+
+[tool.pydantic-mypy]
+init_forbid_extra = true
+init_typed = true
+warn_required_dynamic_aliases = true
+
+# --------------------------------------------------------------------------- #
+# Pytest + coverage                                                            #
+# --------------------------------------------------------------------------- #
+[tool.pytest.ini_options]
+testpaths = ["libs", "services"]
+addopts = [
+    "--import-mode=importlib",
+    "--strict-markers",
+    "--strict-config",
+    "-ra",
+]
+xfail_strict = true
+filterwarnings = ["error"]
+
+[tool.coverage.run]
+branch = true
+source = ["taxi_contracts", "taxi_api"]
+
+[tool.coverage.report]
+fail_under = 85
+show_missing = true
+skip_covered = true
+exclude_also = ["if TYPE_CHECKING:", "raise NotImplementedError"]

@@ -1,0 +1,21 @@
+# Allow-list: send only what images need to the build context.
+*
+!pyproject.toml
+!uv.lock
+!libs/**
+!services/**
+# ...but never tests, caches or local junk
+**/tests/
+**/__pycache__/
+**/*.pyc
+**/.pytest_cache/
+**/.mypy_cache/
+**/.ruff_cache/
+**/.venv/
+**/.env
+**/.env.*
+!**/.env.example
+**/secrets/
+**/*.pem
+**/*.key
+**/*.pw

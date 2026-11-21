@@ -1,0 +1,10 @@
+# Architecture Decision Records
+
+| ADR | Title | Status |
+|---|---|---|
+| [0001](0001-record-architecture-decisions.md) | Record architecture decisions | Accepted |
+| [0002](0002-monorepo-with-contract-based-coupling.md) | Monorepo with contract-based coupling | Accepted |
+| [0003](0003-hybrid-databricks-and-self-hosted.md) | Hybrid platform: Databricks for the lakehouse, self-hosted for the rest | Accepted |
+| [0004](0004-public-exposure-via-tunnel.md) | Public exposure through an outbound tunnel, no open ports | Proposed |
+
+Template: copy the newest ADR, bump the number, keep Context / Decision / Consequences.

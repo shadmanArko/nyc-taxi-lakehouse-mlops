@@ -221,3 +221,30 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# ---------------------------------------------------------------------------
+# Project-specific
+# ---------------------------------------------------------------------------
+# Data never goes into Git: raw/derived data is versioned with DVC + object storage.
+data/
+!data/**/*.dvc
+*.parquet
+*.csv
+# ML artifacts and local tracking stores
+mlruns/
+mlartifacts/
+artifacts/
+*.skops
+*.joblib
+*.pkl
+# dbt
+transform/dbt/target/
+transform/dbt/dbt_packages/
+transform/dbt/logs/
+# Databricks bundles
+.databricks/
+# Secrets (belt and braces; gitleaks also scans every commit)
+secrets/
+*.pw
+*.pem
+*.key

@@ -1,0 +1,168 @@
+# Continuous integration: every push to main and every pull request.
+# Local pre-commit/pre-push hooks run the same checks earlier ("pre-CI");
+# CD (push image, deploy) arrives in Phase 6 as a separate workflow.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+env:
+  UV_VERSION: "0.13.9"  # same uv as the Dockerfile builder image and the uv-lock hook
+  UV_LOCKED: "1"        # fail if uv.lock is out of date with any pyproject.toml
+  FORCE_COLOR: "1"
+
+jobs:
+  hooks:
+    name: Hooks (format, lint, hygiene) + secret scan
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0  # the gitleaks step below scans the full history
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+      - run: uv sync --all-packages
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/pre-commit
+          key: pre-commit-${{ runner.os }}-${{ hashFiles('.pre-commit-config.yaml') }}
+      # The gitleaks hook only scans *staged* changes, which a CI checkout has none of,
+      # so it is skipped here and replaced by a full-history scan.
+      - run: SKIP=gitleaks uv run pre-commit run --all-files --show-diff-on-failure
+      - name: Secret scan (full git history)
+        run: >-
+          docker run --rm -u "$(id -u):$(id -g)" -v "$PWD:/repo"
+          ghcr.io/gitleaks/gitleaks:v8.30.0@sha256:691af3c7c5a48b16f187ce3446d5f194838f91238f27270ed36eef6359a574d9
+          git /repo --redact --verbose
+
+  typecheck:
+    name: Type check (mypy --strict)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+      - run: uv sync --all-packages
+      - run: uv run mypy
+
+  test:
+    name: Tests + coverage
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+      - run: uv sync --all-packages
+      - run: uv run pytest --cov --cov-report=term --cov-report=xml:coverage.xml --junitxml=junit.xml
+      - if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: test-reports
+          path: |
+            coverage.xml
+            junit.xml
+          retention-days: 14
+
+  api-image:
+    name: API image (linux/amd64 build, smoke test, vulnerability scan)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    needs: [test]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - id: meta
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+        with:
+          images: taxi-api
+          tags: type=raw,value=ci
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: services/api/Dockerfile
+          platforms: linux/amd64
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}  # revision, created, source -> traceable image
+          load: true
+          push: false
+          cache-from: type=gha,scope=api
+          cache-to: type=gha,scope=api,mode=max
+      - name: Smoke test the container
+        run: |
+          docker run -d --name api --read-only --tmpfs /tmp --cap-drop ALL \
+            --security-opt no-new-privileges:true -p 127.0.0.1:8000:8000 taxi-api:ci
+          for _ in $(seq 1 30); do
+            curl -fsS http://127.0.0.1:8000/health && break
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:8000/health | grep -q '"status":"ok"'
+          # Without a model the API must say so, not invent an answer.
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8000/ready)" = "503"
+          test "$(docker inspect -f '{{.Config.User}}' taxi-api:ci)" = "10001:10001"
+      - if: failure()
+        run: docker logs api || true
+      - name: Vulnerability scan (fail on fixable high/critical)
+        uses: anchore/scan-action@27805bf3b4e84b4a5c980df22ed233c00390a439 # v7.4.2
+        with:
+          image: taxi-api:ci
+          severity-cutoff: high
+          only-fixed: true
+          fail-build: true
+          output-format: table
+
+  dependency-review:
+    name: Dependency review (new vulnerable or copyleft deps)
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/dependency-review-action@bbc44d14a204704ccc493733616cd1e93a0321ec # v5.0.1
+        with:
+          fail-on-severity: high
+
+  # Single required status check for branch protection: green only if every job passed.
+  ci-ok:
+    name: ci-ok
+    if: always()
+    needs: [hooks, typecheck, test, api-image, dependency-review]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    steps:
+      - name: All required jobs passed
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          echo "job results: $RESULTS"
+          for r in $RESULTS; do
+            # dependency-review is skipped outside pull requests; anything else must succeed.
+            case "$r" in success|skipped) ;; *) exit 1 ;; esac
+          done
