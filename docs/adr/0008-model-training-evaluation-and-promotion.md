@@ -68,5 +68,8 @@ then LightGBM (v2), keeping v1 as `@previous`.
 - **MLflow 3's background job system** (GenAI evaluation) starts ~6 extra processes
   (~1.5 GiB) and OOM-killed the 1 GiB container 31 times; it is disabled
   (`MLFLOW_SERVER_ENABLE_JOB_EXECUTION=false`), leaving the server at ~390 MiB.
+- MLflow runs on the self-hosted server (Postgres registry, artifacts in the `taxi-mlflow`
+  bucket via the server's artifact proxy; clients hold no storage keys). Laptops reach it
+  through the SSH tunnel on port 15050; the champion was retrained there.
 - Retraining on new months is automatic: the refresh DAG emits an asset event that
   schedules `taxi_train_and_promote`.

@@ -68,7 +68,7 @@ piece can be rewritten or replaced without touching the others. Details:
 | Orchestration | Apache Airflow 3 (LocalExecutor, deferrable Databricks operator, file-based secrets) |
 | Data versioning | DVC for repo data; immutable SHA-256-addressed gold snapshots for orchestrated data; both on S3-compatible object storage (SeaweedFS, [ADR-0005](docs/adr/0005-seaweedfs-object-storage.md)) |
 | Training & tuning | scikit-learn `RandomForestRegressor`, LightGBM tuned with Optuna, temporal train/validation/test split |
-| Experiment tracking & registry | MLflow 3 (self-hosted, proxied artifacts, skops model format, registry aliases) |
+| Experiment tracking & registry | MLflow 3 on the self-hosted server (Postgres, artifacts in SeaweedFS via proxy, skops model format, registry aliases) |
 | Model evaluation gates | Champion re-scored on the challenger's test week; ≥ 0.5% better RMSE, no slice > 5% worse |
 | Serving | FastAPI + Pydantic contracts, Docker |
 | Monitoring | Data and prediction drift reports |

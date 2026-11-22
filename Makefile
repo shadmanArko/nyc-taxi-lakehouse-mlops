@@ -85,7 +85,9 @@ bundle-run: ## Run the lakehouse refresh job (bronze -> silver -> gold)
 # --------------------------------------------------------------------------- #
 MLFLOW := docker compose -f infra/mlflow/compose.yaml
 # Training reads the snapshot from object storage via the taxi-dvc AWS profile + tunnel.
-TRAIN_ENV := MLFLOW_DISABLE_AGENT_HINT=1 MLFLOW_TRACKING_URI=http://127.0.0.1:5050 \
+# Server MLflow through the SSH tunnel (Mac 15050 -> server 5050). Local MLflow: 5050.
+MLFLOW_URI ?= http://127.0.0.1:15050
+TRAIN_ENV := MLFLOW_DISABLE_AGENT_HINT=1 MLFLOW_TRACKING_URI=$(MLFLOW_URI) \
 	AWS_PROFILE=taxi-dvc TAXI_S3_ENDPOINT_URL=http://127.0.0.1:8333
 MODEL ?= lightgbm
 TRIALS ?= 30

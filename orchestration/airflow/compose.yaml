@@ -30,7 +30,7 @@ x-airflow: &airflow
     AIRFLOW__CORE__LOAD_EXAMPLES: "False"
     AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "True"
     TAXI_DAG_SCHEDULE: "none"   # local: manual runs only (`make airflow-run`)
-    TAXI_MLFLOW_TRACKING_URI: http://host.docker.internal:5050   # infra/mlflow (local)
+    TAXI_MLFLOW_TRACKING_URI: http://host.docker.internal:15050   # server MLflow via the SSH tunnel
     TAXI_TUNE_TRIALS: "10"
     AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
     AIRFLOW__CORE__EXECUTION_API_SERVER_URL: http://airflow-apiserver:8080/execution/
