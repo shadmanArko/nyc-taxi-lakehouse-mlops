@@ -7,6 +7,14 @@ dependencies = [
     "fastapi>=0.165",
     "pydantic-settings>=2.16",
     "taxi-contracts",
+    "taxi-features",
+    # Serving the registry model: the MLflow client plus the exact libraries the model
+    # was trained with (versions come from the shared uv.lock).
+    "lightgbm>=4.6",
+    "mlflow-skinny>=3.18",
+    "pandas>=2.3",
+    "scikit-learn>=1.9",
+    "skops>=0.16",
     # Production server extras only (fast event loop + HTTP parser). Not uvicorn[standard],
     # which also pulls in reload/websocket/dotenv packages the image never uses.
     "httptools>=0.7",
@@ -16,6 +24,7 @@ dependencies = [
 
 [tool.uv.sources]
 taxi-contracts = { workspace = true }
+taxi-features = { workspace = true }
 
 [build-system]
 requires = ["uv_build>=0.13.0,<0.14"]

@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>NYC Taxi Trip Time</title>
+  <meta name="description" content="Predict how long a New York City yellow taxi trip will take.">
+  <link rel="stylesheet" href="styles.css">
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <main class="shell">
+    <header>
+      <h1>How long will my taxi ride take?</h1>
+      <p class="lede">Pick where you start and end, the distance and when you leave. A model trained on
+        3.3&nbsp;million real NYC yellow-cab trips estimates the ride time.</p>
+    </header>
+
+    <form id="trip" class="card" novalidate>
+      <div class="field">
+        <label for="pickup">Pickup zone</label>
+        <select id="pickup" name="pickup" required disabled><option>Loading zones…</option></select>
+      </div>
+
+      <button type="button" id="swap" class="swap" aria-label="Swap pickup and dropoff">⇅ swap</button>
+
+      <div class="field">
+        <label for="dropoff">Dropoff zone</label>
+        <select id="dropoff" name="dropoff" required disabled><option>Loading zones…</option></select>
+      </div>
+
+      <div class="row">
+        <div class="field">
+          <label for="distance">Distance <span class="hint">(miles)</span></label>
+          <input id="distance" name="distance" type="number" inputmode="decimal" min="0.1" max="100"
+                 step="0.1" value="2.4" required>
+        </div>
+        <div class="field">
+          <label for="when">Pickup time <span class="hint">(New York)</span></label>
+          <input id="when" name="when" type="datetime-local" required>
+        </div>
+      </div>
+
+      <button type="submit" id="go" class="primary" disabled>Estimate ride time</button>
+      <p id="error" class="error" role="alert" hidden></p>
+    </form>
+
+    <section id="result" class="card result" aria-live="polite" hidden>
+      <p class="label">Estimated ride time</p>
+      <p class="minutes"><span id="minutes">–</span> <span class="unit">min</span></p>
+      <p id="route" class="route"></p>
+      <p id="lineage" class="lineage"></p>
+    </section>
+
+    <footer>
+      <span id="status" class="status">Checking the model…</span>
+      <span>·</span>
+      <a href="https://github.com/shadmanArko/nyc-taxi-lakehouse-mlops">How it works</a>
+    </footer>
+  </main>
+</body>
+</html>

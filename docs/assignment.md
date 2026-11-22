@@ -12,11 +12,11 @@ and serve predictions with FastAPI.
 | 2 | Train/validation split | Temporal train / validation / test split (days 1-17 / 18-24 / 25-31) in `jobs/train` | Done (Phase 4) |
 | 3 | Train a scikit-learn `RandomForestRegressor` | `taxi-train --model random_forest`: test RMSE 4.52 min | Done (Phase 4) |
 | 4 | Evaluate with RMSE, log runs to MLflow | RMSE/MAE/R² overall and per slice, logged to self-hosted MLflow with data lineage | Done (Phase 4) |
-| 5 | Reusable preprocessing and model loading for training and API | One sklearn pipeline (preprocessing + model) logged to MLflow; the API loads it from the registry (`champion` alias), and request/response shapes come from `libs/contracts` (Phases 4-5) | Planned |
-| 6 | FastAPI app with a `/predict` endpoint | `services/api` | Skeleton done (Phase 1), model in Phase 5 |
+| 5 | Reusable preprocessing and model loading for training and API | `libs/features` pipeline is part of the logged model; the API loads the registry `@champion` and uses the same code (Phases 4-5) | Done (Phase 5) |
+| 6 | FastAPI app with a `/predict` endpoint | `services/api` serving the MLflow champion, hot reload | Done (Phase 5) |
 | 7 | Run the API locally (uvicorn or Docker) | `make up` (Docker, hardened) | Done (Phase 1) |
-| 8 | Send a sample request | `sample-request.json` + `curl` (Phase 5) | Planned |
-| 9 | Document RMSE and follow-up ideas in the README | README "Assignment" table (Phases 4, 7) | Planned |
+| 8 | Send a sample request | `sample-request.json` + `curl` (README); answer 20.99 min from model v2 | Done (Phase 5) |
+| 9 | Document RMSE and follow-up ideas in the README | RMSE in the README (Phase 4); follow-up ideas in Phase 7 | RMSE done |
 
 ## Stretch
 

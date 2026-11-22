@@ -5,7 +5,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from taxi_api.config import Settings
-from taxi_api.main import create_app, load_predictor
+from taxi_api.main import create_app
 from taxi_contracts import CONTRACT_VERSION, TripFeatures
 
 PAYLOAD: dict[str, Any] = {
@@ -154,11 +154,37 @@ def test_validation_errors_do_not_echo_the_input(client: TestClient) -> None:
 # --- config ---------------------------------------------------------------------
 
 
-def test_load_predictor_returns_none_until_phase_5() -> None:
-    assert load_predictor(Settings(model_uri=None)) is None
-    assert load_predictor(Settings(model_uri="models:/taxi@champion")) is None
+def test_zones_lists_named_zones_without_unknowns(no_model_client: TestClient) -> None:
+    response = no_model_client.get("/zones")
+    assert response.status_code == 200
+    zones = response.json()
+    ids = {z["id"] for z in zones}
+    assert {1, 132, 138, 161}.issubset(ids)  # EWR, JFK, LaGuardia, Midtown Center
+    assert not ids & {264, 265}  # "Unknown" / "Outside of NYC" are not offered
+    jfk = next(z for z in zones if z["id"] == 132)
+    assert jfk == {
+        "id": 132,
+        "borough": "Queens",
+        "zone": "JFK Airport",
+        "service_zone": "Airports",
+    }
+    assert "max-age" in response.headers["cache-control"]
+
+
+def test_model_refresh_seconds_is_bounded() -> None:
+    with pytest.raises(ValueError, match="greater than or equal to 5"):
+        Settings(model_refresh_seconds=1)
 
 
 def test_log_level_is_case_insensitive(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("TAXI_API_LOG_LEVEL", "debug")
     assert Settings().log_level == "DEBUG"
+
+
+def test_repo_sample_request_is_a_valid_contract_payload(client: TestClient) -> None:
+    """The assignment's sample-request.json must always match the live contract."""
+    import json
+    from pathlib import Path
+
+    sample = json.loads((Path(__file__).parents[3] / "sample-request.json").read_text())
+    assert client.post("/predict", json=sample).status_code == 200

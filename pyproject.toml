@@ -41,7 +41,7 @@ package = false
 required-version = ">=0.13.5"
 
 [tool.uv.workspace]
-members = ["libs/*", "services/*", "jobs/*"]
+members = ["libs/*", "services/api", "jobs/*"]
 # transform/dbt is deliberately NOT a member: dbt-databricks pins pydantic<2.13, which
 # conflicts with libs/contracts. It has its own pyproject + uv.lock (ADR-0002).
 exclude = ["transform/dbt"]

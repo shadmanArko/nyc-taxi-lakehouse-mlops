@@ -272,11 +272,52 @@ jobs:
           fail-build: true
           output-format: table
 
+  web-image:
+    name: Web image (nginx config test, UI + header smoke test, vulnerability scan)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: services/web
+          platforms: linux/amd64
+          tags: taxi-web:ci
+          load: true
+          push: false
+          cache-from: type=gha,scope=web
+          cache-to: type=gha,scope=web,mode=max
+      - name: nginx config test + smoke test
+        run: |
+          # The upstream "api" only exists in compose; map it so nginx can start alone.
+          docker run --rm --add-host api:127.0.0.1 taxi-web:ci nginx -t
+          docker run -d --name web --read-only --tmpfs /tmp --cap-drop ALL \
+            --security-opt no-new-privileges:true --add-host api:127.0.0.1 \
+            -p 127.0.0.1:8088:8080 taxi-web:ci
+          for _ in $(seq 1 20); do curl -fsS http://127.0.0.1:8088/healthz && break; sleep 1; done
+          curl -fsS http://127.0.0.1:8088/ | grep -q "How long will my taxi ride take"
+          curl -sI http://127.0.0.1:8088/ | grep -qi "content-security-policy: default-src 'self'"
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8088/api/docs)" = "404"
+          test "$(docker inspect -f '{{.Config.User}}' taxi-web:ci)" = "101"
+      - if: failure()
+        run: docker logs web || true
+      - name: Vulnerability scan (fail on fixable high/critical)
+        uses: anchore/scan-action@27805bf3b4e84b4a5c980df22ed233c00390a439 # v7.4.2
+        with:
+          image: taxi-web:ci
+          severity-cutoff: high
+          only-fixed: true
+          fail-build: true
+          output-format: table
+
   # Single required status check for branch protection: green only if every job passed.
   ci-ok:
     name: ci-ok
     if: always()
-    needs: [hooks, typecheck, test, api-image, dependency-review, dbt, bundle, airflow, mlflow-image]
+    needs: [hooks, typecheck, test, api-image, dependency-review, dbt, bundle, airflow, mlflow-image, web-image]
     runs-on: ubuntu-24.04
     timeout-minutes: 2
     steps:

@@ -16,12 +16,14 @@ WORKDIR /src
 # 1) Third-party dependencies only: cached until uv.lock or a pyproject changes.
 COPY pyproject.toml uv.lock ./
 COPY libs/contracts/pyproject.toml libs/contracts/pyproject.toml
+COPY libs/features/pyproject.toml libs/features/pyproject.toml
 COPY services/api/pyproject.toml services/api/pyproject.toml
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev --package taxi-api --no-install-workspace
 
 # 2) Our code, installed non-editable so the runtime image needs no source tree.
 COPY libs/contracts libs/contracts
+COPY libs/features libs/features
 COPY services/api services/api
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev --package taxi-api --no-editable
@@ -37,8 +39,11 @@ LABEL org.opencontainers.image.title="taxi-api" \
 
 # Apply Debian security fixes published after the pinned base was built (the CI image
 # scan fails on fixable high/critical CVEs), then create the unprivileged user.
+# libgomp1: OpenMP runtime that LightGBM (the served model) links against.
+# hadolint ignore=DL3008
 RUN apt-get update \
     && apt-get upgrade -y --no-install-recommends \
+    && apt-get install -y --no-install-recommends libgomp1 \
     && rm -rf /var/lib/apt/lists/* \
     && groupadd --system --gid 10001 app \
     && useradd --system --uid 10001 --gid app --no-create-home --shell /usr/sbin/nologin app

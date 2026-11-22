@@ -142,9 +142,11 @@ down: ## Stop the local stack
 logs: ## Follow local stack logs
 	$(COMPOSE) logs -f
 
-smoke: ## Hit the running API
+smoke: ## Hit the running API: health, ready (model version), one prediction
 	curl -fsS http://127.0.0.1:$${API_HOST_PORT:-8000}/health && echo
-	curl -sS -o /dev/null -w 'ready: HTTP %{http_code}\n' http://127.0.0.1:$${API_HOST_PORT:-8000}/ready
+	curl -sS http://127.0.0.1:$${API_HOST_PORT:-8000}/ready && echo
+	curl -sS -X POST http://127.0.0.1:$${API_HOST_PORT:-8000}/predict \
+		-H 'Content-Type: application/json' -d @sample-request.json && echo
 
 clean: ## Remove caches and build output
 	rm -rf .pytest_cache .mypy_cache .ruff_cache .coverage coverage.xml junit.xml htmlcov

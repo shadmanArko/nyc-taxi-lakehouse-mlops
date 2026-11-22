@@ -70,7 +70,7 @@ piece can be rewritten or replaced without touching the others. Details:
 | Training & tuning | scikit-learn `RandomForestRegressor`, LightGBM tuned with Optuna, temporal train/validation/test split |
 | Experiment tracking & registry | MLflow 3 on the self-hosted server (Postgres, artifacts in SeaweedFS via proxy, skops model format, registry aliases) |
 | Model evaluation gates | Champion re-scored on the challenger's test week; ≥ 0.5% better RMSE, no slice > 5% worse |
-| Serving | FastAPI + Pydantic contracts, Docker |
+| Serving | FastAPI serving the MLflow `@champion` (hot reload), nginx UI + reverse proxy with rate limits, Docker |
 | Monitoring | Data and prediction drift reports |
 | Code quality | uv, Ruff, mypy `--strict`, pytest, pre-commit, hadolint, actionlint |
 | Security | gitleaks (commit + full history), Grype image scan, dependency review, SHA-pinned actions, Dependabot |
@@ -91,7 +91,8 @@ piece can be rewritten or replaced without touching the others. Details:
 ├── transform/dbt/         # dbt gold layer (own uv project), contract, tests, unit tests
 ├── notebooks/             # EDA that justifies every cleaning rule
 ├── data/                  # DVC-tracked data (only .dvc pointers are in Git)
-├── services/api/          # FastAPI prediction service + Dockerfile
+├── services/api/          # FastAPI: serves the MLflow @champion, hot reload, /zones
+├── services/web/          # static UI + nginx reverse proxy (allow-list, rate limits, CSP)
 ├── infra/                 # local stack (compose/), object storage (storage/), MLflow (mlflow/)
 ├── tools/                 # dev tools, e.g. the local DuckDB lakehouse run
 ├── tests/                 # cross-component contract tests
@@ -99,7 +100,6 @@ piece can be rewritten or replaced without touching the others. Details:
 ├── .github/               # CI workflow, Dependabot, PR template
 ├── orchestration/airflow/ # Airflow 3 DAG, image (jobs in their own venv), local stack, DAG tests
 ├── jobs/training/         # Phase 4: training + evaluation job         (planned)
-└── services/web/          # Phase 5: end-user UI                       (planned)
 ```
 
 ## Roadmap
@@ -108,7 +108,7 @@ piece can be rewritten or replaced without touching the others. Details:
 - [x] **Phase 2 - Data platform:** EDA, push ingestion with raw contract, bronze/silver (Lakeflow), gold (dbt, enforced contract), portable quality rules tested on the real data, DVC. Deployed and run on Databricks Free Edition with identical row counts; data versions stored on the self-hosted SeaweedFS server.
 - [x] **Phase 3 - Orchestration:** Airflow 3 DAG (ingest → landing → Databricks job → gold snapshot), deferrable Databricks step, immutable content-addressed snapshots ([ADR-0007](docs/adr/0007-orchestration-and-content-addressed-snapshots.md))
 - [x] **Phase 4 - ML:** RandomForest + Optuna-tuned LightGBM on a temporal split, MLflow tracking with full data lineage, slice-aware promotion gate via registry aliases, asset-triggered retraining ([ADR-0008](docs/adr/0008-model-training-evaluation-and-promotion.md))
-- [ ] **Phase 5 - Serving + UI:** API serves the `champion` model, web UI, sample request
+- [x] **Phase 5 - Serving + UI:** API serves the registry `@champion` with hot reload; web UI with zone names behind a rate-limited reverse proxy; `sample-request.json` ([ADR-0009](docs/adr/0009-serving-champion-with-hot-reload-and-proxy.md))
 - [ ] **Phase 6 - CD + deployment:** images to GHCR, deploy to the server, public HTTPS link
 - [ ] **Phase 7 - Monitoring + docs:** drift reports, model card, final write-up
 
@@ -122,11 +122,18 @@ make check     # what CI runs except the image jobs: hooks, mypy --strict, tests
 make image     # build the API image for linux/amd64 (CI's api-image job)
 make lakehouse-local  # bronze -> silver -> gold on the real data, locally on DuckDB
 make airflow-bootstrap && make airflow-up && make airflow-run MONTH=2025-01  # orchestrated run
-make up        # build and start the local stack
-make smoke     # /health -> ok, /ready -> 503 until a model exists (Phase 5)
+make up        # build and start the serving stack: UI http://127.0.0.1:8088, API :8000
+make smoke     # /health, /ready (model name + version) and a prediction
 ```
 
-Interactive API docs: <http://127.0.0.1:8000/docs> while the stack is up.
+Ask the API for a prediction (the assignment's sample request):
+
+```bash
+curl -X POST http://127.0.0.1:8000/predict -H "Content-Type: application/json" -d @sample-request.json
+# {"predicted_duration_minutes": 20.99, "model_name": "taxi-trip-duration", "model_version": "2", "contract_version": "1.1.0"}
+```
+
+Interactive API docs: <http://127.0.0.1:8000/docs> while the stack is up (not exposed through the public proxy).
 
 ## Data findings (January 2025)
 

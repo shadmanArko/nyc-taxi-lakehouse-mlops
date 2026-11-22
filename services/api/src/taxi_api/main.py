@@ -4,9 +4,17 @@ Endpoints
 ---------
 GET  /health   liveness: the process is up (used by Docker/compose health checks)
 GET  /ready    readiness: a model is loaded and predictions can be served
+GET  /zones    NYC taxi zones (id, borough, name) for clients
 POST /predict  validated prediction (contract: ``taxi_contracts.TripFeatures``)
+
+With ``TAXI_API_MODEL_URI=models:/<name>@<alias>`` the API serves that registry alias and
+re-checks it every ``TAXI_API_MODEL_REFRESH_SECONDS``: a newly promoted champion goes live
+without a restart. If MLflow is unreachable the API still starts, reports not ready, and
+keeps retrying.
 """
 
+import asyncio
+import contextlib
 import logging
 import math
 from collections.abc import AsyncIterator
@@ -16,12 +24,14 @@ from typing import Annotated, Any, Literal
 from fastapi import Depends, FastAPI, HTTPException, Request, status
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel
 
 from taxi_api import __version__
 from taxi_api.config import Settings, get_settings
-from taxi_api.predictor import Predictor
+from taxi_api.model_manager import ModelManager
+from taxi_api.predictor import ModelRef, Predictor
+from taxi_api.zones import Zone, load_zones
 from taxi_contracts import CONTRACT_VERSION, PredictionResponse, TripFeatures
 
 logger = logging.getLogger("taxi_api")
@@ -57,15 +67,18 @@ def configure_logging(level: str) -> None:
     logger.setLevel(level)
 
 
-def load_predictor(settings: Settings) -> Predictor | None:
-    """Load the configured model. Returns None when no model is configured.
-
-    Phase 5 replaces the body with an MLflow registry loader. Until then the API
-    starts, reports healthy, and honestly reports that it is not ready.
-    """
-    if settings.model_uri:
-        logger.warning("Model loading is not implemented yet; ignoring %s", settings.model_uri)
-    return None
+async def keep_model_fresh(app: FastAPI, manager: ModelManager, interval: float) -> None:
+    """Background loop: (re)load the alias's model; never crash the API over it."""
+    while True:
+        try:
+            if await asyncio.to_thread(manager.refresh):
+                app.state.predictor = manager.current
+        except Exception:
+            logger.exception(
+                "model refresh failed; still serving %s",
+                getattr(manager.current, "model_version", "nothing"),
+            )
+        await asyncio.sleep(interval)
 
 
 def get_predictor(request: Request) -> Predictor:
@@ -100,15 +113,33 @@ async def validation_error_handler(_: Request, exc: Exception) -> JSONResponse:
     )
 
 
-def create_app(predictor: Predictor | None = None, settings: Settings | None = None) -> FastAPI:
-    """Build the app. Inject ``predictor``/``settings`` in tests; production uses defaults."""
+def create_app(
+    predictor: Predictor | None = None,
+    settings: Settings | None = None,
+    manager: ModelManager | None = None,
+) -> FastAPI:
+    """Build the app. Inject ``predictor``/``manager``/``settings`` in tests."""
     resolved = settings if settings is not None else get_settings()
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         configure_logging(resolved.log_level)
-        app.state.predictor = predictor if predictor is not None else load_predictor(resolved)
+        refresher: asyncio.Task[None] | None = None
+        if predictor is not None:
+            app.state.predictor = predictor
+        else:
+            live = manager
+            if live is None and resolved.model_uri:
+                live = ModelManager(ModelRef.parse(resolved.model_uri))
+            if live is not None:
+                refresher = asyncio.create_task(
+                    keep_model_fresh(app, live, resolved.model_refresh_seconds)
+                )
         yield
+        if refresher is not None:
+            refresher.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await refresher
 
     app = FastAPI(
         title="NYC Taxi Trip Duration API",
@@ -122,6 +153,11 @@ def create_app(predictor: Predictor | None = None, settings: Settings | None = N
     @app.get("/health", tags=["ops"])
     def health() -> HealthResponse:
         return HealthResponse()
+
+    @app.get("/zones", tags=["reference"])
+    def zones(response: Response) -> list[Zone]:
+        response.headers["Cache-Control"] = "public, max-age=86400"
+        return list(load_zones())
 
     @app.get("/ready", tags=["ops"], responses=NO_MODEL)
     def ready(model: ReadyPredictor) -> ReadyResponse:

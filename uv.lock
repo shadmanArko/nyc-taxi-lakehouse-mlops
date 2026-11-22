@@ -3202,8 +3202,14 @@ source = { editable = "services/api" }
 dependencies = [
     { name = "fastapi" },
     { name = "httptools" },
+    { name = "lightgbm" },
+    { name = "mlflow-skinny" },
+    { name = "pandas" },
     { name = "pydantic-settings" },
+    { name = "scikit-learn" },
+    { name = "skops" },
     { name = "taxi-contracts" },
+    { name = "taxi-features" },
     { name = "uvicorn" },
     { name = "uvloop", marker = "platform_python_implementation != 'PyPy' and sys_platform != 'win32'" },
 ]
@@ -3212,8 +3218,14 @@ dependencies = [
 requires-dist = [
     { name = "fastapi", specifier = ">=0.165" },
     { name = "httptools", specifier = ">=0.7" },
+    { name = "lightgbm", specifier = ">=4.6" },
+    { name = "mlflow-skinny", specifier = ">=3.18" },
+    { name = "pandas", specifier = ">=2.3" },
     { name = "pydantic-settings", specifier = ">=2.16" },
+    { name = "scikit-learn", specifier = ">=1.9" },
+    { name = "skops", specifier = ">=0.16" },
     { name = "taxi-contracts", editable = "libs/contracts" },
+    { name = "taxi-features", editable = "libs/features" },
     { name = "uvicorn", specifier = ">=0.54" },
     { name = "uvloop", marker = "platform_python_implementation != 'PyPy' and sys_platform != 'win32'", specifier = ">=0.22" },
 ]

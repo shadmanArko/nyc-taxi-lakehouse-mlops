@@ -234,6 +234,8 @@ __marimo__/
 *.csv
 # ...except small, hand-written dbt test fixtures (no real data)
 !transform/dbt/seeds/**/*.csv
+# ...and the small official TLC zone lookup shipped with the API
+!services/api/src/taxi_api/data/taxi_zones.csv
 # ML artifacts and local tracking stores
 mlruns/
 mlartifacts/

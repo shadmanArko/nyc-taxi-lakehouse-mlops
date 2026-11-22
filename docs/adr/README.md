@@ -10,5 +10,6 @@
 | [0006](0006-push-ingestion-and-portable-quality-rules.md) | Push-based ingestion and engine-portable quality rules | Accepted |
 | [0007](0007-orchestration-and-content-addressed-snapshots.md) | Airflow orchestration and content-addressed gold snapshots | Accepted |
 | [0008](0008-model-training-evaluation-and-promotion.md) | Model training, evaluation and gated promotion | Accepted |
+| [0009](0009-serving-champion-with-hot-reload-and-proxy.md) | Serving the registry champion with hot reload, behind a hardened proxy | Accepted |
 
 Template: copy the newest ADR, bump the number, keep Context / Decision / Consequences.
