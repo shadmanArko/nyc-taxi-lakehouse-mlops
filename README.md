@@ -67,9 +67,9 @@ piece can be rewritten or replaced without touching the others. Details:
 | Silver → gold (ELT) | dbt (`dbt-databricks`), enforced model contract, data tests, unit tests (CI on DuckDB) |
 | Orchestration | Apache Airflow 3 (LocalExecutor, deferrable Databricks operator, file-based secrets) |
 | Data versioning | DVC for repo data; immutable SHA-256-addressed gold snapshots for orchestrated data; both on S3-compatible object storage (SeaweedFS, [ADR-0005](docs/adr/0005-seaweedfs-object-storage.md)) |
-| Training & tuning | scikit-learn `RandomForestRegressor` baseline, Optuna, gradient-boosting challenger |
-| Experiment tracking & registry | MLflow |
-| Model evaluation gates | Offline metric gates (RMSE vs baseline and vs champion), slice analysis |
+| Training & tuning | scikit-learn `RandomForestRegressor`, LightGBM tuned with Optuna, temporal train/validation/test split |
+| Experiment tracking & registry | MLflow 3 (self-hosted, proxied artifacts, skops model format, registry aliases) |
+| Model evaluation gates | Champion re-scored on the challenger's test week; ≥ 0.5% better RMSE, no slice > 5% worse |
 | Serving | FastAPI + Pydantic contracts, Docker |
 | Monitoring | Data and prediction drift reports |
 | Code quality | uv, Ruff, mypy `--strict`, pytest, pre-commit, hadolint, actionlint |
@@ -84,13 +84,15 @@ piece can be rewritten or replaced without touching the others. Details:
 ├── libs/contracts/        # versioned schemas shared by all components (the only shared code)
 ├── jobs/ingest/           # TLC download, raw-contract check, manifest, upload to landing volume
 ├── jobs/export_gold/      # gold month -> contract check -> content-addressed snapshot
+├── jobs/train/            # training, Optuna tuning, MLflow logging, promotion gate
+├── libs/features/         # feature pipeline shipped inside the model (no train/serve skew)
 ├── databricks.yml         # Databricks bundle: schemas, landing volume, pipeline, job
 ├── databricks/            # Lakeflow pipeline (bronze, silver) + portable quality rules + tests
 ├── transform/dbt/         # dbt gold layer (own uv project), contract, tests, unit tests
 ├── notebooks/             # EDA that justifies every cleaning rule
 ├── data/                  # DVC-tracked data (only .dvc pointers are in Git)
 ├── services/api/          # FastAPI prediction service + Dockerfile
-├── infra/                 # local stack (compose/), object storage (storage/)
+├── infra/                 # local stack (compose/), object storage (storage/), MLflow (mlflow/)
 ├── tools/                 # dev tools, e.g. the local DuckDB lakehouse run
 ├── tests/                 # cross-component contract tests
 ├── docs/                  # architecture, ADRs, deployment, assignment brief
@@ -105,7 +107,7 @@ piece can be rewritten or replaced without touching the others. Details:
 - [x] **Phase 1 - Foundation:** monorepo, uv workspace, contracts, API skeleton, hardened container, pre-commit, CI, docs/ADRs
 - [x] **Phase 2 - Data platform:** EDA, push ingestion with raw contract, bronze/silver (Lakeflow), gold (dbt, enforced contract), portable quality rules tested on the real data, DVC. Deployed and run on Databricks Free Edition with identical row counts; data versions stored on the self-hosted SeaweedFS server.
 - [x] **Phase 3 - Orchestration:** Airflow 3 DAG (ingest → landing → Databricks job → gold snapshot), deferrable Databricks step, immutable content-addressed snapshots ([ADR-0007](docs/adr/0007-orchestration-and-content-addressed-snapshots.md))
-- [ ] **Phase 4 - ML:** RF baseline → Optuna → challenger, MLflow tracking, evaluation gate, registry promotion
+- [x] **Phase 4 - ML:** RandomForest + Optuna-tuned LightGBM on a temporal split, MLflow tracking with full data lineage, slice-aware promotion gate via registry aliases, asset-triggered retraining ([ADR-0008](docs/adr/0008-model-training-evaluation-and-promotion.md))
 - [ ] **Phase 5 - Serving + UI:** API serves the `champion` model, web UI, sample request
 - [ ] **Phase 6 - CD + deployment:** images to GHCR, deploy to the server, public HTTPS link
 - [ ] **Phase 7 - Monitoring + docs:** drift reports, model card, final write-up
@@ -162,7 +164,7 @@ requirement maps to this repo: [docs/assignment.md](docs/assignment.md).
 
 | Question | Answer |
 |---|---|
-| RMSE of the final model | _Phase 4_ |
+| RMSE of the final model | **4.29 minutes** on the held-out last week of January 2025 (788,828 trips): LightGBM tuned with Optuna, R² 0.849, MAE 2.58 min. The required `RandomForestRegressor` scores **4.52 min** (R² 0.833); a mean baseline scores 11.06 min. Details: [ADR-0008](docs/adr/0008-model-training-evaluation-and-promotion.md). |
 | What would you do differently with more time? | _Phase 7_ |
 
 ## License

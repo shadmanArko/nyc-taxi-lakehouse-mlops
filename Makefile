@@ -5,7 +5,8 @@ SHELL := /bin/bash
 COMPOSE := docker compose -f infra/compose/compose.yaml
 
 .PHONY: help setup hooks lint format typecheck test check eda data-pull ingest ingest-upload \
-	dbt-ci lakehouse-local bundle-validate bundle-deploy bundle-run airflow-test airflow-bootstrap \
+	dbt-ci lakehouse-local bundle-validate bundle-deploy bundle-run mlflow-up mlflow-down train promote \
+	airflow-test airflow-bootstrap \
 	airflow-up airflow-down airflow-run image up down logs smoke clean
 
 help: ## List available targets
@@ -78,6 +79,28 @@ bundle-deploy: ## Deploy schemas, volume, pipeline and job
 
 bundle-run: ## Run the lakehouse refresh job (bronze -> silver -> gold)
 	databricks bundle run taxi_medallion_refresh -t $(BUNDLE_TARGET)
+
+# --------------------------------------------------------------------------- #
+# Machine learning (Phase 4)                                                   #
+# --------------------------------------------------------------------------- #
+MLFLOW := docker compose -f infra/mlflow/compose.yaml
+# Training reads the snapshot from object storage via the taxi-dvc AWS profile + tunnel.
+TRAIN_ENV := MLFLOW_DISABLE_AGENT_HINT=1 MLFLOW_TRACKING_URI=http://127.0.0.1:5050 \
+	AWS_PROFILE=taxi-dvc TAXI_S3_ENDPOINT_URL=http://127.0.0.1:8333
+MODEL ?= lightgbm
+TRIALS ?= 30
+
+mlflow-up: ## Start local MLflow at http://127.0.0.1:5050
+	$(MLFLOW) up -d --build --wait
+
+mlflow-down: ## Stop local MLflow
+	$(MLFLOW) down
+
+train: ## Train MODEL (mean_baseline|random_forest|lightgbm) on MONTH, register as challenger
+	$(TRAIN_ENV) uv run taxi-train --month $(MONTH) --model $(MODEL) --tune-trials $(TRIALS) --register
+
+promote: ## Evaluation gate: promote @challenger to @champion if it is better
+	$(TRAIN_ENV) uv run taxi-promote --month $(MONTH)
 
 # --------------------------------------------------------------------------- #
 # Orchestration (Phase 3)                                                      #

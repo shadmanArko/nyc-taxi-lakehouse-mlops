@@ -241,11 +241,42 @@ jobs:
           fail-build: true
           output-format: table
 
+  mlflow-image:
+    name: MLflow image (linux/amd64 build, smoke test, vulnerability scan)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: infra/mlflow
+          platforms: linux/amd64
+          tags: taxi-mlflow:ci
+          load: true
+          push: false
+          cache-from: type=gha,scope=mlflow
+          cache-to: type=gha,scope=mlflow,mode=max
+      - name: Smoke test (non-root, drivers present)
+        run: |
+          docker run --rm --entrypoint sh taxi-mlflow:ci -c \
+            'test "$(id -u)" = 10001 && python -c "import mlflow, psycopg2, boto3; print(mlflow.__version__)"'
+      - name: Vulnerability scan (fail on fixable high/critical)
+        uses: anchore/scan-action@27805bf3b4e84b4a5c980df22ed233c00390a439 # v7.4.2
+        with:
+          image: taxi-mlflow:ci
+          severity-cutoff: high
+          only-fixed: true
+          fail-build: true
+          output-format: table
+
   # Single required status check for branch protection: green only if every job passed.
   ci-ok:
     name: ci-ok
     if: always()
-    needs: [hooks, typecheck, test, api-image, dependency-review, dbt, bundle, airflow]
+    needs: [hooks, typecheck, test, api-image, dependency-review, dbt, bundle, airflow, mlflow-image]
     runs-on: ubuntu-24.04
     timeout-minutes: 2
     steps:

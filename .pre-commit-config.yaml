@@ -15,6 +15,7 @@ repos:
       - id: mixed-line-ending
         args: [--fix=lf]
       - id: check-yaml
+        args: [--unsafe]  # syntax-only: allows Compose merge tags (!reset, !override)
       - id: check-toml
       - id: check-json
       - id: check-merge-conflict

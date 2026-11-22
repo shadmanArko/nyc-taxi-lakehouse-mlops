@@ -1,0 +1,14 @@
+[project]
+name = "taxi-features"
+version = "0.1.0"
+description = "Feature engineering that ships inside the model, so training and serving cannot diverge"
+requires-python = ">=3.13,<3.14"
+dependencies = [
+    "numpy>=2.3",
+    "pandas>=2.3",
+    "scikit-learn>=1.9",
+]
+
+[build-system]
+requires = ["uv_build>=0.13.0,<0.14"]
+build-backend = "uv_build"

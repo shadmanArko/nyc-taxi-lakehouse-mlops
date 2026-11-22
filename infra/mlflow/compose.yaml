@@ -1,0 +1,83 @@
+# MLflow tracking server + model registry.
+#   make mlflow-up   -> http://127.0.0.1:5050
+#
+# Clients never get storage keys: the server proxies artifact uploads/downloads
+# (--serve-artifacts), so only this container talks to object storage.
+#   Local:  artifacts in a Docker volume (default).
+#   Server: MLFLOW_ARTIFACTS_DESTINATION=s3://taxi-mlflow/artifacts, the `mlflow` S3
+#           identity mounted as a secret file, and real database credentials.
+
+name: taxi-mlflow
+
+x-hardening: &hardening
+  cap_drop: [ALL]
+  security_opt: ["no-new-privileges:true"]
+  restart: unless-stopped
+  logging:
+    driver: json-file
+    options: {max-size: "10m", max-file: "3"}
+
+services:
+  mlflow-db:
+    <<: *hardening
+    image: postgres:17.7-alpine@sha256:bb377b7239d2774ac8cc76f481596ce96c5a6b5e9d141f6d0a0ee371a6e7c0f2
+    cap_add: [CHOWN, DAC_OVERRIDE, FOWNER, SETGID, SETUID]   # entrypoint drops to the postgres user
+    environment:
+      POSTGRES_USER: mlflow
+      POSTGRES_PASSWORD: mlflow   # LOCAL ONLY; the server uses a secret file
+      POSTGRES_DB: mlflow
+    volumes:
+      - mlflow-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "mlflow"]
+      interval: 10s
+      retries: 5
+    mem_limit: 512m
+    networks: [mlflow]
+
+  mlflow:
+    <<: *hardening
+    build:
+      context: .
+    image: taxi-mlflow:local
+    environment:
+      # MLflow 3's background job system (GenAI evaluation, scorers) starts a job runner and
+      # ~6 huey consumers at ~240 MB each. This project does not use it.
+      MLFLOW_SERVER_ENABLE_JOB_EXECUTION: "false"
+      MLFLOW_SERVER_JOB_ENABLE_PERIODIC_TASKS: "false"
+    command:
+      - mlflow
+      - server
+      - --host=0.0.0.0
+      - --port=5000
+      - --backend-store-uri=postgresql+psycopg2://mlflow:mlflow@mlflow-db:5432/mlflow
+      - --serve-artifacts
+      - --artifacts-destination=${MLFLOW_ARTIFACTS_DESTINATION:-/mlartifacts}
+      - --workers=1   # single-user tracking server
+      # Host-header allow-list (DNS-rebinding protection in MLflow 3).
+      - --allowed-hosts=localhost,localhost:5050,127.0.0.1,127.0.0.1:5050,mlflow,mlflow:5000,host.docker.internal,host.docker.internal:5050
+    ports:
+      - "127.0.0.1:${MLFLOW_HOST_PORT:-5050}:5000"   # 5000 is taken by macOS AirPlay
+    read_only: true
+    tmpfs:
+      - /tmp:size=256m
+    volumes:
+      - mlflow-artifacts:/mlartifacts
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:5000/health', timeout=4)"]
+      interval: 30s
+      start_period: 30s
+      retries: 3
+    cpus: 1.0
+    mem_limit: 1g
+    depends_on:
+      mlflow-db: {condition: service_healthy}
+    networks: [mlflow]
+
+volumes:
+  mlflow-db:
+  mlflow-artifacts:
+
+networks:
+  mlflow:
+    name: taxi-mlflow

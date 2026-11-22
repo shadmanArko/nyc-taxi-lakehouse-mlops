@@ -9,5 +9,6 @@
 | [0005](0005-seaweedfs-object-storage.md) | SeaweedFS for self-hosted object storage | Accepted |
 | [0006](0006-push-ingestion-and-portable-quality-rules.md) | Push-based ingestion and engine-portable quality rules | Accepted |
 | [0007](0007-orchestration-and-content-addressed-snapshots.md) | Airflow orchestration and content-addressed gold snapshots | Accepted |
+| [0008](0008-model-training-evaluation-and-promotion.md) | Model training, evaluation and gated promotion | Accepted |
 
 Template: copy the newest ADR, bump the number, keep Context / Decision / Consequences.

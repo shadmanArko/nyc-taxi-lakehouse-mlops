@@ -1,0 +1,55 @@
+# Server overrides for infra/mlflow/compose.yaml: file-based secrets, artifacts in the
+# self-hosted object storage, durable data on the data disk.
+#
+#   MLFLOW_DB_DIR=... MLFLOW_DB_PASSWORD_FILE=... MLFLOW_PGPASS_FILE=... \
+#   MLFLOW_S3_CREDENTIALS_FILE=... \
+#     docker compose -f compose.yaml -f compose.server.yaml up -d --wait
+#
+# No password appears in this file, in environment variables or in process arguments:
+#   * Postgres reads its password from a secret file (POSTGRES_PASSWORD_FILE).
+#   * MLflow connects with a password-less URI; libpq reads the password from PGPASSFILE.
+#   * S3 keys of the scoped `mlflow` identity come from a mounted AWS credentials file.
+
+secrets:
+  mlflow_db_password:
+    file: ${MLFLOW_DB_PASSWORD_FILE:?file containing the database password}
+  mlflow_pgpass:
+    file: ${MLFLOW_PGPASS_FILE:?pgpass line - mlflow-db:5432:mlflow:mlflow:<password>}
+  mlflow_s3_credentials:
+    file: ${MLFLOW_S3_CREDENTIALS_FILE:?AWS credentials file with a [taxi-mlflow] profile}
+
+services:
+  mlflow-db:
+    environment:
+      POSTGRES_PASSWORD: !reset null
+      POSTGRES_PASSWORD_FILE: /run/secrets/mlflow_db_password
+    secrets: [mlflow_db_password]
+    volumes: !override
+      - ${MLFLOW_DB_DIR:?host directory for the MLflow database}:/var/lib/postgresql/data
+
+  mlflow:
+    environment:
+      PGPASSFILE: /run/secrets/mlflow_pgpass
+      AWS_SHARED_CREDENTIALS_FILE: /run/secrets/mlflow_s3_credentials
+      AWS_PROFILE: taxi-mlflow
+      MLFLOW_S3_ENDPOINT_URL: http://seaweedfs:8333
+      AWS_REQUEST_CHECKSUM_CALCULATION: when_required
+      AWS_RESPONSE_CHECKSUM_VALIDATION: when_required
+    secrets: [mlflow_pgpass, mlflow_s3_credentials]
+    command: !override
+      - mlflow
+      - server
+      - --host=0.0.0.0
+      - --port=5000
+      - --backend-store-uri=postgresql+psycopg2://mlflow@mlflow-db:5432/mlflow
+      - --serve-artifacts
+      - --artifacts-destination=s3://taxi-mlflow/artifacts
+      - --workers=1
+      - --allowed-hosts=localhost,localhost:5050,127.0.0.1,127.0.0.1:5050,127.0.0.1:15050,localhost:15050,mlflow,mlflow:5000
+    volumes: !reset []
+    networks: [mlflow, storage]
+
+networks:
+  storage:
+    external: true
+    name: taxi-storage

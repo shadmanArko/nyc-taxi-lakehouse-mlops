@@ -1,0 +1,28 @@
+[project]
+name = "taxi-train"
+version = "0.1.0"
+description = "Train, evaluate, register and promote trip-duration models with MLflow"
+requires-python = ">=3.13,<3.14"
+dependencies = [
+    "boto3>=1.40",
+    "lightgbm>=4.6",
+    "mlflow>=3.18",
+    "optuna>=4.5",
+    "pandas>=2.3",
+    "pyarrow>=22.0",
+    "scikit-learn>=1.9",
+    "taxi-contracts",
+    "taxi-features",
+]
+
+[project.scripts]
+taxi-train = "taxi_train.cli:train_main"
+taxi-promote = "taxi_train.cli:promote_main"
+
+[tool.uv.sources]
+taxi-contracts = { workspace = true }
+taxi-features = { workspace = true }
+
+[build-system]
+requires = ["uv_build>=0.13.0,<0.14"]
+build-backend = "uv_build"

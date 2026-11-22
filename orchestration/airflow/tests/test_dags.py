@@ -28,19 +28,41 @@ def test_task_order(dagbag: DagBag) -> None:
         "upload_to_landing",
         "refresh_lakehouse",
         "export_gold",
+        "announce_gold_snapshot",
     ]
     assert set(dag.task_ids) == set(order)
     for upstream, downstream in itertools.pairwise(order):
-        assert dag.get_task(downstream).upstream_task_ids == {upstream}
+        # the announcement also reads the month from resolve_month (XCom argument)
+        assert upstream in dag.get_task(downstream).upstream_task_ids
 
 
-def test_safe_scheduling_defaults(dagbag: DagBag) -> None:
-    dag = dagbag.dags["taxi_monthly_refresh"]
+@pytest.mark.parametrize("dag_id", ["taxi_monthly_refresh", "taxi_train_and_promote"])
+def test_safe_scheduling_defaults(dagbag: DagBag, dag_id: str) -> None:
+    dag = dagbag.dags[dag_id]
     assert dag.catchup is False
     assert dag.max_active_runs == 1
     for task in dag.tasks:
-        assert task.retries >= 2, task.task_id
+        if task.task_id != "promotion_gate":  # a rejection is a decision, never retried
+            assert task.retries >= 2, task.task_id
         assert task.execution_timeout is not None, task.task_id
+
+
+def test_refresh_announces_the_gold_asset_that_schedules_training(dagbag: DagBag) -> None:
+    from common.assets import GOLD_SNAPSHOTS
+
+    announce = dagbag.dags["taxi_monthly_refresh"].get_task("announce_gold_snapshot")
+    assert GOLD_SNAPSHOTS in announce.outlets
+    train_dag = dagbag.dags["taxi_train_and_promote"]
+    assert GOLD_SNAPSHOTS in train_dag.timetable.asset_condition.objects
+
+
+def test_training_dag_shape_and_gate_semantics(dagbag: DagBag) -> None:
+    dag = dagbag.dags["taxi_train_and_promote"]
+    assert dag.get_task("train_challenger").upstream_task_ids == {"resolve_month"}
+    gate = dag.get_task("promotion_gate")
+    assert gate.upstream_task_ids == {"train_challenger"}
+    assert gate.skip_on_exit_code == [3]  # not promoted = skipped, not failed
+    assert gate.retries == 0
 
 
 def test_production_schedule_is_monthly(dagbag: DagBag) -> None:
@@ -54,7 +76,7 @@ def test_databricks_step_is_deferrable(dagbag: DagBag) -> None:
 
 
 def test_no_secrets_in_dag_source() -> None:
-    source = (DAGS / "taxi_monthly_refresh.py").read_text()
+    source = "".join(p.read_text() for p in DAGS.rglob("*.py"))
     # Built from parts so this test file itself does not look like it contains a key.
     for marker in ("dapi", "aws_secret_access_key =", "BEGIN " + "PRIVATE KEY"):
         assert marker not in source

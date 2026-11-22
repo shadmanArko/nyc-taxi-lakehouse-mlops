@@ -4,7 +4,7 @@
 
 FROM ghcr.io/astral-sh/uv:0.13.9@sha256:d3b601f0c7b118bc1753febf7c41cc80981df678445e0254284eecf84db79a7d AS uv
 
-# ---------- jobs: taxi-ingest + taxi-export-gold, isolated from Airflow ----------
+# ---------- jobs: ingest, export-gold, train - isolated from Airflow ----------
 FROM apache/airflow:slim-3.4.0-python3.13@sha256:371c258d67cd0a34bac60a28c940b65968b98dff2554e12b981f1df75b4be570 AS jobs
 # Build-only stage (never run), so root is fine here; the runtime stage ends as uid 50000.
 # hadolint ignore=DL3002
@@ -15,10 +15,13 @@ ENV UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy UV_PYTHON_DOWNLOADS=0 \
 WORKDIR /build
 COPY pyproject.toml uv.lock ./
 COPY libs/contracts libs/contracts
+COPY libs/features libs/features
 COPY jobs/ingest jobs/ingest
 COPY jobs/export_gold jobs/export_gold
+COPY jobs/train jobs/train
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --no-dev --no-editable --package taxi-ingest --package taxi-export-gold
+    uv sync --frozen --no-dev --no-editable \
+        --package taxi-ingest --package taxi-export-gold --package taxi-train
 
 # ---------- runtime ----------
 FROM apache/airflow:slim-3.4.0-python3.13@sha256:371c258d67cd0a34bac60a28c940b65968b98dff2554e12b981f1df75b4be570
@@ -33,8 +36,17 @@ USER 0
 # This base (a Docker Hardened Image) also keeps per-package records in
 # /var/lib/dpkg/status.d/, which apt-get upgrade does not update. Drop a record when its
 # version no longer matches what dpkg actually installed, so scanners see the truth.
-RUN apt-get update \
+# The base pins its hardened-image apt repo (dhi.io) at priority 999, above Debian's 500,
+# so a newer *Debian* security fix (e.g. libc deb13u5) would never be taken. Lower that pin:
+# a newer Debian release now wins, and since priority stays < 1000 nothing is downgraded.
+# libgomp1: OpenMP runtime that LightGBM links against (training job), pinned to the exact
+# build of the installed gcc-14-base it depends on.
+RUN printf 'Package: *\nPin: origin dhi.io\nPin-Priority: 400\n' \
+        > /etc/apt/preferences.d/90-prefer-newer-debian-security \
+    && apt-get update \
     && apt-get upgrade -y --no-install-recommends \
+    && apt-get install -y --no-install-recommends \
+        "libgomp1=$(dpkg-query -W -f='${Version}' gcc-14-base)" \
     && rm -rf /var/lib/apt/lists/* \
     && for record in /var/lib/dpkg/status.d/*; do \
          pkg="$(sed -n 's/^Package: //p' "$record" | head -n1)"; \

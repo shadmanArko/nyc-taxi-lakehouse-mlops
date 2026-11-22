@@ -30,6 +30,8 @@ x-airflow: &airflow
     AIRFLOW__CORE__LOAD_EXAMPLES: "False"
     AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "True"
     TAXI_DAG_SCHEDULE: "none"   # local: manual runs only (`make airflow-run`)
+    TAXI_MLFLOW_TRACKING_URI: http://host.docker.internal:5050   # infra/mlflow (local)
+    TAXI_TUNE_TRIALS: "10"
     AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
     AIRFLOW__CORE__EXECUTION_API_SERVER_URL: http://airflow-apiserver:8080/execution/
     AIRFLOW__CORE__AUTH_MANAGER: airflow.api_fastapi.auth.managers.simple.simple_auth_manager.SimpleAuthManager
@@ -96,7 +98,9 @@ services:
   airflow-scheduler:
     <<: *airflow
     command: ["scheduler"]
-    mem_limit: 2g
+    # LocalExecutor runs tasks inside this container, including model training on
+    # millions of rows (2g was OOM-killed, exit -9).
+    mem_limit: ${AIRFLOW_SCHEDULER_MEM:-5g}
     depends_on:
       airflow-init: {condition: service_completed_successfully}
 

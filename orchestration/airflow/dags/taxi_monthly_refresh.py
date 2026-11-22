@@ -1,6 +1,7 @@
 """Monthly lakehouse refresh: TLC file -> landing volume -> Databricks -> gold snapshot.
 
     resolve_month -> fetch_tlc_month -> upload_to_landing -> refresh_lakehouse -> export_gold
+        -> announce_gold_snapshot  (asset event -> schedules taxi_train_and_promote)
 
 Airflow only orchestrates. Each step is a self-contained job with its own CLI and
 its own virtualenv (/opt/taxi-jobs), so Airflow's dependencies and ours never mix,
@@ -18,6 +19,7 @@ from datetime import UTC, datetime, timedelta
 from airflow.providers.databricks.operators.databricks import DatabricksRunNowOperator
 from airflow.providers.standard.operators.bash import BashOperator
 from airflow.sdk import DAG, Param, task
+from common.assets import GOLD_SNAPSHOTS
 
 # Deployment-specific names (set in the container environment, see compose.yaml).
 JOBS_BIN = "/opt/taxi-jobs/bin"
@@ -135,4 +137,11 @@ with DAG(
         append_env=True,
     )
 
-    resolve_month() >> fetch >> upload >> refresh >> export
+    @task(outlets=[GOLD_SNAPSHOTS])
+    def announce_gold_snapshot(month: str, outlet_events: object = None) -> None:
+        """Emit an asset event (with the month) that schedules the training DAG."""
+        if outlet_events is not None:
+            outlet_events[GOLD_SNAPSHOTS].extra = {"month": month}  # type: ignore[index]
+
+    month = resolve_month()
+    month >> fetch >> upload >> refresh >> export >> announce_gold_snapshot(month)

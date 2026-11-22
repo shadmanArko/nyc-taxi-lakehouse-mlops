@@ -78,7 +78,7 @@ select = [
 "tools/**" = ["S608"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["taxi_contracts", "taxi_api", "taxi_ingest", "taxi_export_gold", "lakehouse_rules", "conftest"]
+known-first-party = ["taxi_contracts", "taxi_api", "taxi_ingest", "taxi_export_gold", "taxi_features", "taxi_train", "lakehouse_rules", "conftest"]
 
 # --------------------------------------------------------------------------- #
 # Mypy: strict type checking                                                   #
@@ -104,12 +104,18 @@ mypy_path = [
     "services/api/src",
     "jobs/ingest/src",
     "jobs/export_gold/src",
+    "jobs/train/src",
+    "libs/features/src",
     "databricks/src/taxi_pipeline",
     "databricks/tests",
 ]
 
 [[tool.mypy.overrides]]
-module = ["pyarrow", "pyarrow.*", "boto3", "boto3.*", "botocore", "botocore.*"]  # no type stubs
+module = [
+    "pyarrow", "pyarrow.*", "boto3", "boto3.*", "botocore", "botocore.*",
+    "sklearn", "sklearn.*", "lightgbm", "lightgbm.*", "optuna", "optuna.*",
+    "mlflow", "mlflow.*", "pandas", "pandas.*",
+]  # no (complete) type stubs
 ignore_missing_imports = true
 
 [tool.pydantic-mypy]
@@ -130,11 +136,31 @@ addopts = [
     "-ra",
 ]
 xfail_strict = true
-filterwarnings = ["error"]
+filterwarnings = [
+    "error",
+    # Third-party (MLflow's SQLAlchemy store), not our code; remove when MLflow updates.
+    "ignore:The ``noload`` loader strategy is deprecated:DeprecationWarning",
+    # Third-party (MLflow input-example code vs pandas 3 Arrow-backed column labels).
+    "ignore:Operation with range is deprecated",
+    # Third-party (raised while MLflow imports its own chat-agent loader).
+    "ignore:.*Any type hint is inferred as AnyType:UserWarning",
+    # MLflow hint that int columns cannot hold NaN. Our contract forbids missing zone IDs.
+    # As an *error* it is swallowed inside MLflow's signature code and silently degrades
+    # the logged model, so it must stay a warning.
+    "ignore:.*Inferred schema contains integer column:UserWarning",
+]
 
 [tool.coverage.run]
 branch = true
-source = ["taxi_contracts", "taxi_api", "taxi_ingest", "taxi_export_gold", "lakehouse_rules"]
+source = [
+    "taxi_contracts",
+    "taxi_api",
+    "taxi_ingest",
+    "taxi_export_gold",
+    "taxi_features",
+    "taxi_train",
+    "lakehouse_rules",
+]
 
 [tool.coverage.report]
 fail_under = 85
