@@ -235,3 +235,24 @@ def test_cache_keeps_only_the_newest_two_versions(
 def test_no_cache_means_no_warm_start() -> None:
     manager = ModelManager(ModelRef(NAME, "champion"), lambda _: "1", lambda _, v: Versioned(v))
     assert manager.warm_start() is False
+
+
+def test_cached_model_is_loaded_before_the_first_request(
+    registry: None,
+    tmp_path: Path,
+) -> None:
+    """Scale-to-zero releases traffic on 'healthy': no 503 window right after a wake."""
+    from taxi_api.predictor import ModelCache
+
+    _register(slope=3.0)
+    cache = ModelCache(tmp_path / "models")
+    ModelManager(ModelRef.parse(f"models:/{NAME}@champion"), cache=cache).refresh()
+
+    def registry_down(_: ModelRef) -> str:
+        raise ConnectionError("MLflow is asleep")
+
+    woken = ModelManager(ModelRef.parse(f"models:/{NAME}@champion"), registry_down, cache=cache)
+    with TestClient(create_app(settings=Settings(), manager=woken)) as client:
+        # The very first request, with no waiting: the model must already be there.
+        assert client.post("/predict", json=PAYLOAD).status_code == 200
+        assert client.get("/ready").status_code == 200

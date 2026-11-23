@@ -69,11 +69,6 @@ def configure_logging(level: str) -> None:
 
 async def keep_model_fresh(app: FastAPI, manager: ModelManager, interval: float) -> None:
     """Background loop: (re)load the alias's model; never crash the API over it."""
-    try:
-        if await asyncio.to_thread(manager.warm_start):
-            app.state.predictor = manager.current
-    except Exception:
-        logger.exception("warm start from the local model cache failed")
     while True:
         try:
             if await asyncio.to_thread(manager.refresh):
@@ -138,6 +133,14 @@ def create_app(
                 cache = ModelCache(resolved.model_cache_dir) if resolved.model_cache_dir else None
                 live = ModelManager(ModelRef.parse(resolved.model_uri), cache=cache)
             if live is not None:
+                # Load the locally cached model *before* the app starts serving (and so
+                # before /health turns healthy). Scale-to-zero releases traffic on
+                # "healthy", so requests right after a wake must find the model loaded.
+                try:
+                    if await asyncio.to_thread(live.warm_start):
+                        app.state.predictor = live.current
+                except Exception:
+                    logger.exception("warm start from the local model cache failed")
                 refresher = asyncio.create_task(
                     keep_model_fresh(app, live, resolved.model_refresh_seconds)
                 )
