@@ -41,6 +41,9 @@ USER 0
 # a newer Debian release now wins, and since priority stays < 1000 nothing is downgraded.
 # libgomp1: OpenMP runtime that LightGBM links against (training job), pinned to the exact
 # build of the installed gcc-14-base it depends on.
+# CI passes today's date: a changed build arg forces this layer to rebuild, so cached
+# images still pick up security fixes published since the last build (at least daily).
+ARG SECURITY_REFRESH=manual
 RUN printf 'Package: *\nPin: origin dhi.io\nPin-Priority: 400\n' \
         > /etc/apt/preferences.d/90-prefer-newer-debian-security \
     && apt-get update \

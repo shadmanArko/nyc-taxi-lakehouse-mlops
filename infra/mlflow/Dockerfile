@@ -2,6 +2,9 @@
 # image lacks, running as a non-root user.
 FROM ghcr.io/mlflow/mlflow:v3.18.0@sha256:257204c77980b0f3450a26eb6089e487603fcdd4509529eadaf88f90669f5c13
 
+# CI passes today's date: a changed build arg forces this layer to rebuild, so cached
+# images still pick up security fixes published since the last build (at least daily).
+ARG SECURITY_REFRESH=manual
 RUN apt-get update \
     && apt-get upgrade -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/* \

@@ -9,6 +9,9 @@ RUN xcaddy build \
     --replace github.com/klauspost/compress=github.com/klauspost/compress@v1.20.2
 
 FROM caddy:2.11.9-alpine@sha256:003a97808e781aa9f7e75cc2f43d34d461099031faf5e20faefb9f61126836f0
+# CI passes today's date: a changed build arg forces this layer to rebuild, so cached
+# images still pick up security fixes published since the last build (at least daily).
+ARG SECURITY_REFRESH=manual
 RUN apk upgrade --no-cache   # security fixes newer than the pinned base
 COPY --from=builder /usr/bin/caddy /usr/bin/caddy
 # The base gives caddy the cap_net_bind_service file capability (ports < 1024). With

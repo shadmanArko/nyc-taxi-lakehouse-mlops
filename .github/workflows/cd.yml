@@ -64,9 +64,12 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+      - id: today   # daily build arg: rebuilds the security-update layer at least once a day
+        run: echo "date=$(date -u +%F)" >> "$GITHUB_OUTPUT"
       - id: build
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
+          build-args: SECURITY_REFRESH=${{ steps.today.outputs.date }}
           context: ${{ matrix.context }}
           file: ${{ matrix.file }}
           platforms: linux/amd64           # the server's architecture

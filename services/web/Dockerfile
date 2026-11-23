@@ -3,6 +3,9 @@ FROM nginxinc/nginx-unprivileged:1.31.7-alpine@sha256:b5047b9b76845eac124358373c
 
 USER 0
 # Security fixes published after the pinned base (the CI image scan enforces this).
+# CI passes today's date: a changed build arg forces this layer to rebuild, so cached
+# images still pick up security fixes published since the last build (at least daily).
+ARG SECURITY_REFRESH=manual
 RUN apk upgrade --no-cache
 USER 101
 

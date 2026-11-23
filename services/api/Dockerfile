@@ -40,6 +40,9 @@ LABEL org.opencontainers.image.title="taxi-api" \
 # Apply Debian security fixes published after the pinned base was built (the CI image
 # scan fails on fixable high/critical CVEs), then create the unprivileged user.
 # libgomp1: OpenMP runtime that LightGBM (the served model) links against.
+# CI passes today's date: a changed build arg forces this layer to rebuild, so cached
+# images still pick up security fixes published since the last build (at least daily).
+ARG SECURITY_REFRESH=manual
 # hadolint ignore=DL3008
 RUN apt-get update \
     && apt-get upgrade -y --no-install-recommends \

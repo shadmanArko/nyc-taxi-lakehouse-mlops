@@ -103,8 +103,11 @@ jobs:
           images: taxi-api
           tags: type=raw,value=ci
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - id: today   # daily build arg: rebuilds the security-update layer at least once a day
+        run: echo "date=$(date -u +%F)" >> "$GITHUB_OUTPUT"
       - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
+          build-args: SECURITY_REFRESH=${{ steps.today.outputs.date }}
           context: .
           file: services/api/Dockerfile
           platforms: linux/amd64
@@ -217,8 +220,11 @@ jobs:
           uv sync
           AIRFLOW_HOME="$RUNNER_TEMP/airflow" uv run pytest -q
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - id: today   # daily build arg: rebuilds the security-update layer at least once a day
+        run: echo "date=$(date -u +%F)" >> "$GITHUB_OUTPUT"
       - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
+          build-args: SECURITY_REFRESH=${{ steps.today.outputs.date }}
           context: .
           file: orchestration/airflow/Dockerfile
           platforms: linux/amd64
@@ -250,8 +256,11 @@ jobs:
         with:
           persist-credentials: false
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - id: today   # daily build arg: rebuilds the security-update layer at least once a day
+        run: echo "date=$(date -u +%F)" >> "$GITHUB_OUTPUT"
       - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
+          build-args: SECURITY_REFRESH=${{ steps.today.outputs.date }}
           context: infra/mlflow
           platforms: linux/amd64
           tags: taxi-mlflow:ci
@@ -281,8 +290,11 @@ jobs:
         with:
           persist-credentials: false
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - id: today   # daily build arg: rebuilds the security-update layer at least once a day
+        run: echo "date=$(date -u +%F)" >> "$GITHUB_OUTPUT"
       - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
+          build-args: SECURITY_REFRESH=${{ steps.today.outputs.date }}
           context: services/web
           platforms: linux/amd64
           tags: taxi-web:ci
@@ -322,8 +334,11 @@ jobs:
         with:
           persist-credentials: false
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - id: today   # daily build arg: rebuilds the security-update layer at least once a day
+        run: echo "date=$(date -u +%F)" >> "$GITHUB_OUTPUT"
       - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
+          build-args: SECURITY_REFRESH=${{ steps.today.outputs.date }}
           context: infra/gateway
           platforms: linux/amd64
           tags: taxi-gateway:ci
