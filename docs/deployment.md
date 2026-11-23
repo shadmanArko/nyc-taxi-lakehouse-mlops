@@ -33,7 +33,8 @@ Changes to the server are never applied ad hoc:
 3. The server operator reviews and approves the request; only then is it applied.
 4. Verify on the server with synthetic data, then with the real workflow.
 
-Deployment requests are kept in `infra/deploy-requests/` (Phase 6).
+Server-specific overrides live in [`infra/server/`](../infra/server/); the server runs a
+pinned checkout plus images from GHCR by commit SHA. Scale-to-zero: [ADR-0010](adr/0010-scale-to-zero.md).
 
 ## Public access
 

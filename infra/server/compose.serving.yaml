@@ -1,0 +1,19 @@
+# Server overrides for infra/compose/compose.yaml (web + api), scale-to-zero.
+#   IMAGE_TAG=<commit sha> MODEL_CACHE_DIR=/srv/data/taxi-mlops/model-cache \
+#     docker compose -f infra/compose/compose.yaml -f infra/server/compose.serving.yaml up -d --no-build
+# then `docker compose ... stop`: the gateway's Sablier starts them on demand.
+services:
+  api:
+    image: ghcr.io/shadmanarko/taxi-api:${IMAGE_TAG:?commit SHA of the CI-tested image}
+    build: !reset null
+    environment:
+      MLFLOW_TRACKING_URI: http://caddy:8091   # MLflow on demand, through the gateway
+    volumes: !override
+      - ${MODEL_CACHE_DIR:?host directory for the model cache, owned by 10001}:/models
+    extra_hosts: !reset []
+    ports: !reset []                           # reachable only through the gateway
+
+  web:
+    image: ghcr.io/shadmanarko/taxi-web:${IMAGE_TAG:?commit SHA of the CI-tested image}
+    build: !reset null
+    ports: !reset []

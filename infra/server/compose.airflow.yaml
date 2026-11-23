@@ -1,0 +1,37 @@
+# Server overrides for orchestration/airflow/compose.yaml. Airflow normally sleeps (all
+# containers stopped); infra/server/airflow-monthly.sh starts it on the 15th, runs the
+# refresh (which triggers training via its asset event), then stops it again.
+#   IMAGE_TAG=<commit sha> AIRFLOW_CONNECTIONS_FILE=... docker compose \
+#     -f orchestration/airflow/compose.yaml -f infra/server/compose.airflow.yaml up -d --no-build
+x-server-airflow: &server-airflow
+  image: ghcr.io/shadmanarko/taxi-airflow:${IMAGE_TAG:?commit SHA of the CI-tested image}
+  build: !reset null
+  extra_hosts: !reset []
+  networks: [airflow, serving, storage]
+
+services:
+  airflow-init:
+    <<: *server-airflow
+  airflow-apiserver:
+    <<: *server-airflow
+    ports: !reset []          # admin UI: not published (use `docker compose exec` / port-forward)
+  airflow-scheduler:
+    <<: *server-airflow
+    environment:
+      TAXI_MLFLOW_TRACKING_URI: http://caddy:8091   # MLflow on demand via the gateway
+  airflow-dag-processor:
+    <<: *server-airflow
+  airflow-triggerer:
+    <<: *server-airflow
+
+secrets:
+  airflow_connections:
+    file: ${AIRFLOW_CONNECTIONS_FILE:?Airflow connections JSON (databricks_default, taxi_storage)}
+
+networks:
+  serving:
+    external: true
+    name: taxi-mlops-serving   # reach the gateway (caddy:8091) for MLflow
+  storage:
+    external: true
+    name: taxi-storage         # taxi_storage connection: endpoint http://seaweedfs:8333

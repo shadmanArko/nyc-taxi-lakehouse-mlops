@@ -1,0 +1,79 @@
+# Scale-to-zero gateway: the only always-on part of the serving stack (ADR-0010).
+#   docker compose -f infra/gateway/compose.yaml up -d --build --wait
+#   http://127.0.0.1:8090  (Tailscale Funnel points here on the server)
+#
+# Sablier starts/stops containers labelled sablier.enable=true / sablier.group=taxi-serving.
+# It never touches the Docker socket: a socket proxy allows only list/inspect/events and
+# container start/stop. Everything else (exec, create, images, volumes...) is denied.
+
+name: taxi-gateway
+
+x-hardening: &hardening
+  cap_drop: [ALL]
+  security_opt: ["no-new-privileges:true"]
+  restart: unless-stopped
+  logging:
+    driver: json-file
+    options: {max-size: "10m", max-file: "3"}
+
+services:
+  socket-proxy:
+    <<: *hardening
+    image: linuxserver/socket-proxy:3.4.8-r0-ls107@sha256:6beb1743581ec3b2ed1a2bafd617e8c7a1d7ae2fe835293e333327618fc2b925
+    environment:
+      CONTAINERS: 1     # list / inspect
+      EVENTS: 1         # watch container state
+      ALLOW_START: 1
+      ALLOW_STOP: 1
+      POST: 0           # every other write is denied
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      # Upstream rules + one extra: allow POST /containers/{id}/wait (Sablier, after a stop).
+      - ./socket-proxy.haproxy.cfg:/templates/haproxy.cfg:ro
+    read_only: true
+    tmpfs: [/run, /tmp]
+    mem_limit: 64m
+    networks: [control]   # reachable only by Sablier
+
+  sablier:
+    <<: *hardening
+    image: sablierapp/sablier:1.21.1@sha256:ceb0b06eca3783991199ce392fa0af74ac28953918f7e558f574a8ca4f4458f8
+    command:
+      - start
+      - --provider.name=docker
+      - --provider.auto-stop-on-startup=true   # sleep the group whenever Sablier (re)starts
+    environment:
+      DOCKER_HOST: tcp://socket-proxy:2375
+    read_only: true
+    mem_limit: 64m
+    depends_on: [socket-proxy]
+    networks: [control, edge]
+
+  caddy:
+    <<: *hardening
+    build: .
+    image: taxi-gateway:local
+    environment:
+      SABLIER_SESSION_DURATION: ${SABLIER_SESSION_DURATION:-15m}
+    ports:
+      - "127.0.0.1:${GATEWAY_HOST_PORT:-8090}:8090"   # public site (Tailscale Funnel)
+      - "127.0.0.1:${MLFLOW_GATEWAY_PORT:-5051}:8091" # MLflow on demand (admin, tunnel only)
+    read_only: true
+    tmpfs: [/tmp]
+    mem_limit: 128m
+    depends_on: [sablier]
+    networks: [edge, serving, mlflow]
+
+networks:
+  control:
+    name: taxi-gateway-control
+    internal: true            # socket proxy is unreachable from anything but Sablier
+  edge:
+    name: taxi-gateway-edge
+    internal: true
+  serving:
+    external: true            # the web/api network from infra/compose
+    name: taxi-mlops-serving
+  mlflow:
+    external: true            # infra/mlflow's network
+    name: taxi-mlflow

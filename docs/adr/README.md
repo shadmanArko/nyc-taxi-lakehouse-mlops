@@ -11,5 +11,6 @@
 | [0007](0007-orchestration-and-content-addressed-snapshots.md) | Airflow orchestration and content-addressed gold snapshots | Accepted |
 | [0008](0008-model-training-evaluation-and-promotion.md) | Model training, evaluation and gated promotion | Accepted |
 | [0009](0009-serving-champion-with-hot-reload-and-proxy.md) | Serving the registry champion with hot reload, behind a hardened proxy | Accepted |
+| [0010](0010-scale-to-zero.md) | Scale-to-zero on a single server (Sablier), public via Tailscale Funnel | Accepted |
 
 Template: copy the newest ADR, bump the number, keep Context / Decision / Consequences.

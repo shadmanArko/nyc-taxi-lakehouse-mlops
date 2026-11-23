@@ -7,7 +7,7 @@ COMPOSE := docker compose -f infra/compose/compose.yaml
 .PHONY: help setup hooks lint format typecheck test check eda data-pull ingest ingest-upload \
 	dbt-ci lakehouse-local bundle-validate bundle-deploy bundle-run mlflow-up mlflow-down train promote \
 	airflow-test airflow-bootstrap \
-	airflow-up airflow-down airflow-run image up down logs smoke clean
+	airflow-up airflow-down airflow-run image up gateway-up gateway-down wake down logs smoke clean
 
 help: ## List available targets
 	@grep -hE '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}'
@@ -135,6 +135,18 @@ image: ## Build the API image for the server's platform (linux/amd64)
 
 up: ## Start the local stack
 	$(COMPOSE) up -d --build --wait
+
+GATEWAY := docker compose -f infra/gateway/compose.yaml
+
+gateway-up: ## Scale-to-zero gateway at http://127.0.0.1:8090 (sleeps web/api/mlflow)
+	$(GATEWAY) up -d --build --wait
+
+gateway-down: ## Stop the gateway (services stay as they are)
+	$(GATEWAY) down
+
+wake: ## Wake the serving group through the gateway and time it
+	curl -s -o /dev/null -w 'woke in %{time_total}s (HTTP %{http_code})\n' \
+		-X POST http://127.0.0.1:8090/api/predict -H 'Content-Type: application/json' -d @sample-request.json
 
 down: ## Stop the local stack
 	$(COMPOSE) down

@@ -184,3 +184,54 @@ def test_promotion_is_picked_up_by_refresh(registry: None) -> None:
     assert manager.refresh() is True
     assert manager.current.model_version == "2"
     assert manager.current.predict(TripFeatures.model_validate(PAYLOAD)) > first
+
+
+# --- Local model cache (scale-to-zero cold starts) ------------------------------
+
+
+def test_cold_start_serves_from_cache_while_registry_is_down(
+    registry: None,
+    tmp_path: Path,
+) -> None:
+    from taxi_api.predictor import ModelCache
+
+    _register(slope=3.0)
+    cache = ModelCache(tmp_path / "models")
+    first = ModelManager(ModelRef.parse(f"models:/{NAME}@champion"), cache=cache)
+    assert first.refresh() is True
+    assert cache.current_version(NAME) == "1"
+
+    def registry_down(_: ModelRef) -> str:
+        raise ConnectionError("MLflow is asleep")
+
+    # A brand-new process (container just woke up) with MLflow unreachable:
+    woken = ModelManager(ModelRef.parse(f"models:/{NAME}@champion"), registry_down, cache=cache)
+    assert woken.warm_start() is True
+    assert woken.current is not None
+    assert woken.current.model_version == "1"
+    minutes = woken.current.predict(TripFeatures.model_validate(PAYLOAD))
+    assert minutes == pytest.approx(3.0 * 2.4 + 2, abs=1e-3)
+    with pytest.raises(ConnectionError):
+        woken.refresh()  # registry still down: keeps serving the cached model
+    assert woken.current.model_version == "1"
+
+
+def test_cache_keeps_only_the_newest_two_versions(
+    registry: None,
+    tmp_path: Path,
+) -> None:
+    from taxi_api.predictor import ModelCache
+
+    cache = ModelCache(tmp_path / "models")
+    manager = ModelManager(ModelRef.parse(f"models:/{NAME}@champion"), cache=cache)
+    for slope in (3.0, 4.0, 5.0):
+        _register(slope=slope)
+        manager.refresh()
+    kept = sorted(p.name for p in (tmp_path / "models" / NAME).iterdir() if p.is_dir())
+    assert kept == ["2", "3"]
+    assert cache.current_version(NAME) == "3"
+
+
+def test_no_cache_means_no_warm_start() -> None:
+    manager = ModelManager(ModelRef(NAME, "champion"), lambda _: "1", lambda _, v: Versioned(v))
+    assert manager.warm_start() is False

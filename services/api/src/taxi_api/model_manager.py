@@ -5,10 +5,18 @@ Only when that version changes is the new model downloaded and loaded, and only 
 it loaded successfully is it swapped in. A failed refresh keeps serving the old model.
 """
 
+import functools
 import logging
 from collections.abc import Callable
 
-from taxi_api.predictor import ModelRef, Predictor, load_version, resolve_version
+from taxi_api.predictor import (
+    ModelCache,
+    ModelRef,
+    Predictor,
+    load_cached,
+    load_version,
+    resolve_version,
+)
 
 log = logging.getLogger("taxi_api")
 
@@ -18,12 +26,31 @@ Loader = Callable[[ModelRef, str], Predictor]
 
 class ModelManager:
     def __init__(
-        self, ref: ModelRef, resolve: Resolver = resolve_version, load: Loader = load_version
+        self,
+        ref: ModelRef,
+        resolve: Resolver = resolve_version,
+        load: Loader | None = None,
+        cache: ModelCache | None = None,
     ) -> None:
         self.ref = ref
+        self.cache = cache
         self._resolve = resolve
-        self._load = load
+        self._load = load or functools.partial(load_version, cache=cache)
         self.current: Predictor | None = None
+
+    def warm_start(self) -> bool:
+        """Serve the locally cached version immediately (scale-to-zero cold starts).
+
+        No registry call: the API can answer within seconds of waking, and the normal
+        refresh then checks the registry for a newer champion in the background.
+        """
+        if self.current is not None or self.cache is None:
+            return False
+        cached = load_cached(self.ref, self.cache)
+        if cached is None:
+            return False
+        self.current = cached
+        return True
 
     def refresh(self) -> bool:
         """Load the alias's version if it changed. Returns True when a new model went live."""

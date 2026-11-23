@@ -74,7 +74,8 @@ piece can be rewritten or replaced without touching the others. Details:
 | Monitoring | Data and prediction drift reports |
 | Code quality | uv, Ruff, mypy `--strict`, pytest, pre-commit, hadolint, actionlint |
 | Security | gitleaks (commit + full history), Grype image scan, dependency review, SHA-pinned actions, Dependabot |
-| CI/CD | GitHub Actions (CI now; CD to the server in Phase 6) |
+| CI/CD | GitHub Actions: CI on every push/PR; CD publishes signed amd64 images (SBOM + provenance) to GHCR for green `main` |
+| Scale-to-zero | Sablier + Caddy gateway: services sleep when idle, wake on request; socket proxy limits Docker access |
 | Exposure | Secure public HTTPS tunnel, no open ports (see [ADR-0004](docs/adr/0004-public-exposure-via-tunnel.md)) |
 
 ## Repository layout
@@ -93,7 +94,7 @@ piece can be rewritten or replaced without touching the others. Details:
 ├── data/                  # DVC-tracked data (only .dvc pointers are in Git)
 ├── services/api/          # FastAPI: serves the MLflow @champion, hot reload, /zones
 ├── services/web/          # static UI + nginx reverse proxy (allow-list, rate limits, CSP)
-├── infra/                 # local stack (compose/), object storage (storage/), MLflow (mlflow/)
+├── infra/                 # serving (compose/), gateway (gateway/), storage/, mlflow/, server overrides (server/)
 ├── tools/                 # dev tools, e.g. the local DuckDB lakehouse run
 ├── tests/                 # cross-component contract tests
 ├── docs/                  # architecture, ADRs, deployment, assignment brief
@@ -109,7 +110,7 @@ piece can be rewritten or replaced without touching the others. Details:
 - [x] **Phase 3 - Orchestration:** Airflow 3 DAG (ingest → landing → Databricks job → gold snapshot), deferrable Databricks step, immutable content-addressed snapshots ([ADR-0007](docs/adr/0007-orchestration-and-content-addressed-snapshots.md))
 - [x] **Phase 4 - ML:** RandomForest + Optuna-tuned LightGBM on a temporal split, MLflow tracking with full data lineage, slice-aware promotion gate via registry aliases, asset-triggered retraining ([ADR-0008](docs/adr/0008-model-training-evaluation-and-promotion.md))
 - [x] **Phase 5 - Serving + UI:** API serves the registry `@champion` with hot reload; web UI with zone names behind a rate-limited reverse proxy; `sample-request.json` ([ADR-0009](docs/adr/0009-serving-champion-with-hot-reload-and-proxy.md))
-- [ ] **Phase 6 - CD + deployment:** images to GHCR, deploy to the server, public HTTPS link
+- [x] **Phase 6 - CD + scale-to-zero:** signed images to GHCR from green `main`; Sablier wakes web/api/MLflow on demand (3.5 s cold start) and sleeps them after 15 min; monthly timer for Airflow; Tailscale Funnel link ([ADR-0010](docs/adr/0010-scale-to-zero.md)). _Server rollout pending operator approval._
 - [ ] **Phase 7 - Monitoring + docs:** drift reports, model card, final write-up
 
 ## Quickstart
@@ -158,7 +159,8 @@ flowchart LR
     B --> C[commit-msg<br/>Conventional Commits]
     C --> D[pre-push<br/>mypy, tests]
     D --> E[CI<br/>hooks, secrets, types, tests,<br/>amd64 image, smoke, scan]
-    E --> F[CD - Phase 6<br/>push image, deploy]
+    E --> F[CD<br/>signed images to GHCR]
+    F --> G[Server<br/>operator-approved rollout,<br/>scale-to-zero]
 ```
 
 See [CONTRIBUTING.md](CONTRIBUTING.md).

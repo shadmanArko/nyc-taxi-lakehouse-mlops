@@ -1,0 +1,60 @@
+# Always-on front door with scale-to-zero (ADR-0010).
+# Requests wake the "taxi-serving" group (web, api, mlflow) through Sablier; after
+# SABLIER_SESSION_DURATION without traffic Sablier stops them again.
+{
+	admin off
+	auto_https off # TLS is terminated by Tailscale Funnel in front of this
+	order sablier before reverse_proxy
+}
+
+:8090 {
+	# Liveness of the gateway itself: never wakes anything.
+	handle /gateway-health {
+		respond "ok" 200
+	}
+
+	# API calls wait (up to 90 s) while the group starts, then pass through unchanged.
+	@api path /api/*
+	route @api {
+		sablier http://sablier:10000 {
+			group taxi-serving
+			session_duration {$SABLIER_SESSION_DURATION:15m}
+			blocking {
+				timeout 90s
+			}
+		}
+		reverse_proxy web:8080
+	}
+
+	# Browsers get a "waking up" page that refreshes itself until the site is ready.
+	route {
+		sablier http://sablier:10000 {
+			group taxi-serving
+			session_duration {$SABLIER_SESSION_DURATION:15m}
+			dynamic {
+				display_name "NYC Taxi Trip Time (waking up, ~30 s)"
+				theme ghost
+				refresh_frequency 3s
+			}
+		}
+		reverse_proxy web:8080
+	}
+}
+
+# Internal only (never on the public tunnel): MLflow on demand, group "taxi-mlflow".
+# Used by the API's background model refresh, by Airflow's training and by the admin UI.
+# Clients wait while MLflow starts; it stops again after the idle period.
+:8091 {
+	route {
+		sablier http://sablier:10000 {
+			group taxi-mlflow
+			session_duration {$SABLIER_SESSION_DURATION:15m}
+			blocking {
+				timeout 120s
+			}
+		}
+		reverse_proxy mlflow:5000 {
+			header_up Host mlflow:5000 # on MLflow's --allowed-hosts list
+		}
+	}
+}

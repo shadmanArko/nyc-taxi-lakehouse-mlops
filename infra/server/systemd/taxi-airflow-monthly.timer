@@ -1,0 +1,10 @@
+[Unit]
+Description=Monthly NYC taxi pipeline (15th, 06:00 UTC; the TLC publishes ~2 months late)
+
+[Timer]
+OnCalendar=*-*-15 06:00:00 UTC
+Persistent=true
+RandomizedDelaySec=15min
+
+[Install]
+WantedBy=timers.target

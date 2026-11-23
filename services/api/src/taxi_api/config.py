@@ -1,6 +1,7 @@
 """Runtime configuration, read from ``TAXI_API_*`` environment variables."""
 
 from functools import lru_cache
+from pathlib import Path
 from typing import Annotated, Literal
 
 from pydantic import BeforeValidator, Field
@@ -22,6 +23,8 @@ class Settings(BaseSettings):
     model_uri: str | None = None
     # How often to check whether the alias moved to a new version (hot reload).
     model_refresh_seconds: Annotated[int, Field(ge=5, le=3600)] = 60
+    # Local copy of the served model (a persistent volume): cold starts load it at once.
+    model_cache_dir: Path | None = None
 
 
 @lru_cache

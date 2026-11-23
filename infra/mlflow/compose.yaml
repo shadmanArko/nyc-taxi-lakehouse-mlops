@@ -31,7 +31,13 @@ services:
     healthcheck:
       test: ["CMD", "pg_isready", "-U", "mlflow"]
       interval: 10s
+      start_period: 30s
+      start_interval: 1s
       retries: 5
+    labels:
+      # Scale-to-zero (ADR-0010): woken through the gateway's internal port 8091.
+      sablier.enable: "true"
+      sablier.group: taxi-mlflow
     mem_limit: 512m
     networks: [mlflow]
 
@@ -66,8 +72,12 @@ services:
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:5000/health', timeout=4)"]
       interval: 30s
-      start_period: 30s
+      start_period: 60s
+      start_interval: 1s
       retries: 3
+    labels:
+      sablier.enable: "true"
+      sablier.group: taxi-mlflow
     cpus: 1.0
     mem_limit: 1g
     depends_on:

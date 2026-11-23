@@ -1,0 +1,12 @@
+# Server overrides for infra/gateway/compose.yaml.
+#   IMAGE_TAG=<commit sha> docker compose -f infra/gateway/compose.yaml \
+#     -f infra/server/compose.gateway.yaml up -d --no-build --wait
+# 127.0.0.1:8090 -> public site (Tailscale Funnel target)
+# 127.0.0.1:5050 -> MLflow on demand (replaces MLflow's own port; Mac tunnel 15050 -> 5050)
+services:
+  caddy:
+    image: ghcr.io/shadmanarko/taxi-gateway:${IMAGE_TAG:?commit SHA of the CI-tested image}
+    build: !reset null
+    ports: !override
+      - "127.0.0.1:8090:8090"
+      - "127.0.0.1:5050:8091"

@@ -30,7 +30,7 @@ from pydantic import BaseModel
 from taxi_api import __version__
 from taxi_api.config import Settings, get_settings
 from taxi_api.model_manager import ModelManager
-from taxi_api.predictor import ModelRef, Predictor
+from taxi_api.predictor import ModelCache, ModelRef, Predictor
 from taxi_api.zones import Zone, load_zones
 from taxi_contracts import CONTRACT_VERSION, PredictionResponse, TripFeatures
 
@@ -69,6 +69,11 @@ def configure_logging(level: str) -> None:
 
 async def keep_model_fresh(app: FastAPI, manager: ModelManager, interval: float) -> None:
     """Background loop: (re)load the alias's model; never crash the API over it."""
+    try:
+        if await asyncio.to_thread(manager.warm_start):
+            app.state.predictor = manager.current
+    except Exception:
+        logger.exception("warm start from the local model cache failed")
     while True:
         try:
             if await asyncio.to_thread(manager.refresh):
@@ -130,7 +135,8 @@ def create_app(
         else:
             live = manager
             if live is None and resolved.model_uri:
-                live = ModelManager(ModelRef.parse(resolved.model_uri))
+                cache = ModelCache(resolved.model_cache_dir) if resolved.model_cache_dir else None
+                live = ModelManager(ModelRef.parse(resolved.model_uri), cache=cache)
             if live is not None:
                 refresher = asyncio.create_task(
                     keep_model_fresh(app, live, resolved.model_refresh_seconds)

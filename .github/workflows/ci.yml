@@ -313,11 +313,55 @@ jobs:
           fail-build: true
           output-format: table
 
+  gateway-image:
+    name: Gateway image (Caddy + Sablier build, config validation, vulnerability scan)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: infra/gateway
+          platforms: linux/amd64
+          tags: taxi-gateway:ci
+          load: true
+          push: false
+          cache-from: type=gha,scope=gateway
+          cache-to: type=gha,scope=gateway,mode=max
+      - name: Validate Caddyfile, plugin present, non-root
+        run: |
+          docker run --rm --entrypoint caddy taxi-gateway:ci \
+            validate --config /etc/caddy/Caddyfile --adapter caddyfile
+          docker run --rm --entrypoint caddy taxi-gateway:ci list-modules | grep -q http.handlers.sablier
+          test "$(docker inspect -f '{{.Config.User}}' taxi-gateway:ci)" = "10001:10001"
+      - name: Vulnerability scan (fail on fixable high/critical)
+        uses: anchore/scan-action@27805bf3b4e84b4a5c980df22ed233c00390a439 # v7.4.2
+        with:
+          image: taxi-gateway:ci
+          severity-cutoff: high
+          only-fixed: true
+          fail-build: true
+          output-format: table
+
   # Single required status check for branch protection: green only if every job passed.
   ci-ok:
     name: ci-ok
     if: always()
-    needs: [hooks, typecheck, test, api-image, dependency-review, dbt, bundle, airflow, mlflow-image, web-image]
+    needs:
+      - hooks
+      - typecheck
+      - test
+      - api-image
+      - dependency-review
+      - dbt
+      - bundle
+      - airflow
+      - mlflow-image
+      - web-image
+      - gateway-image
     runs-on: ubuntu-24.04
     timeout-minutes: 2
     steps:
