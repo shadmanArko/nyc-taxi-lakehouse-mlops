@@ -19,7 +19,10 @@
 | MLflow | Self-hosted server | Experiment tracking, model registry, `champion` alias | 4 |
 | API | Self-hosted server (container) | Validate requests, serve the champion model | 1 (skeleton), 5 |
 | Web UI | Self-hosted server (container) | Form for end users, calls the API | 5 |
-| Monitoring | Self-hosted server | Data and prediction drift reports | 7 |
+| Monitoring job | Self-hosted server (Airflow task) | PSI drift per feature and target, champion RMSE on the new month, retrain advice | 7 |
+| BI marts | Databricks SQL warehouse (dbt) | Hourly demand and pace, daily trips, pickup zones | 7 |
+| Portal snapshot job | Self-hosted server (Airflow task) | Collect every department's numbers, publish one `portal.json` to MLflow | 7 |
+| Portal | Web UI + API `GET /portal` | Overview + one page per department; requirements register; model card | 7 |
 
 Databricks Free Edition cannot reach a private server, and its outbound internet is
 limited to an allowlist, so data always crosses the boundary **from our side**: the
@@ -37,6 +40,8 @@ ingest job *pushes* raw files into a Unity Catalog landing volume
 | Training → serving | MLflow registered model `taxi-trip-duration`, alias `champion`, pyfunc signature | MLflow (Phase 4) | Promotion only through the evaluation gate |
 | Serving → clients | `TripFeatures` / `PredictionResponse` | [`libs/contracts`](../libs/contracts) | Semver: `CONTRACT_VERSION`; breaking = major bump |
 | Orchestrator → everything | Container images + CLI entry points | each component's Dockerfile | Images are versioned and pinned |
+| Pipeline → portal | `portal.json` (`snapshot_version`), one section per department, each `ok` / `unavailable` | `jobs/portal` ([ADR-0011](adr/0011-portal-monitoring-and-retention.md)) | Additive; bump `snapshot_version` on breaking change |
+| Docs → portal | `docs/requirements.yaml`, `docs/model-card.md` (copied into the site) | `tools/build_portal_static.py` | A test fails if copies drift or a trace breaks |
 
 The model is logged **with its preprocessing** (one scikit-learn pipeline), so the API never
 re-implements feature engineering. That removes the most common train/serve skew.
@@ -61,6 +66,9 @@ sequenceDiagram
     TR->>ML: register candidate
     AF->>ML: evaluation gate: candidate beats champion?
     ML-->>API: champion alias moves, API reloads
+    AF->>ML: drift report (previous month vs new month)
+    AF->>ML: publish portal snapshot (Databricks, MLflow, GitHub numbers)
+    ML-->>API: API refreshes /portal (cached for cold starts)
 ```
 
 ## Non-functional requirements
@@ -70,12 +78,17 @@ sequenceDiagram
 - **Security:** no secrets in Git (gitleaks on staged changes locally, full-history scan in
   CI), secrets as files, images scanned for vulnerabilities, containers non-root with all
   capabilities dropped, ports bound to loopback. Public access only through an outbound
-  tunnel; only the UI and `/predict` are public, admin tools stay private.
+  tunnel; only the UI, `/predict` and read-only `/zones`, `/ready`, `/health`, `/portal`
+  are public, admin tools stay private.
 - **Quality gates:** formatting, lint, strict typing, tests with a coverage floor, a contract
   schema snapshot, data tests (dbt + expectations), model evaluation gate before promotion.
   CI reports one aggregate status (`ci-ok`) for branch protection.
 - **Operability:** `/health` (liveness) and `/ready` (readiness) on every service, health
-  checks in compose, log rotation, CPU/RAM limits.
+  checks in compose, log rotation, CPU/RAM limits; weekly image retention in GHCR and on
+  the server.
+- **Traceability:** every functional and non-functional requirement in
+  [requirements.yaml](requirements.yaml) points at the code and the test that proves it;
+  CI fails if a link breaks.
 
 ## Decisions
 

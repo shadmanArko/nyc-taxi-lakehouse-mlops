@@ -82,7 +82,10 @@ def main() -> int:
         "AIRFLOW__API_AUTH__JWT_SECRET": old.get("AIRFLOW__API_AUTH__JWT_SECRET")
         or secrets.token_urlsafe(48),
         "TAXI_CATALOG": catalog,
+        "TAXI_BRONZE_SCHEMA": res["schemas"]["bronze"]["name"],
+        "TAXI_SILVER_SCHEMA": res["schemas"]["silver"]["name"],
         "TAXI_GOLD_SCHEMA": res["schemas"]["gold"]["name"],
+        "TAXI_PIPELINE_NAME": res["pipelines"]["taxi_medallion"]["name"],
         "TAXI_LANDING_VOLUME": f"/Volumes/{catalog}/{res['schemas']['raw']['name']}/landing/yellow",
         "TAXI_DATABRICKS_JOB_NAME": job_name,
         "TAXI_SNAPSHOT_BUCKET": "taxi-dvc",

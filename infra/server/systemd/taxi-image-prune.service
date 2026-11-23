@@ -1,0 +1,12 @@
+[Unit]
+Description=NYC taxi MLOps: prune old taxi-* images (keeps images in use + the previous release)
+Wants=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/srv/apps/taxi-mlops/infra/server/prune-images.sh
+Environment=KEEP=2
+Nice=10
+IOSchedulingClass=idle
+TimeoutStartSec=30min

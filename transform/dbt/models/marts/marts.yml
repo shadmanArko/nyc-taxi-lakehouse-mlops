@@ -1,0 +1,66 @@
+version: 2
+
+models:
+  - name: bi_hourly_demand
+    description: Demand and pace by month, ISO weekday and pickup hour. For BI dashboards.
+    config: {tags: ["bi"]}
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [source_month, pickup_day_of_week, pickup_hour]
+    columns:
+      - name: pickup_day_of_week
+        data_tests:
+          - not_null
+          - dbt_utils.accepted_range: {arguments: {min_value: 1, max_value: 7}}
+      - name: pickup_hour
+        data_tests:
+          - not_null
+          - dbt_utils.accepted_range: {arguments: {min_value: 0, max_value: 23}}
+      - name: trips
+        data_tests:
+          - not_null
+          - dbt_utils.accepted_range: {arguments: {min_value: 1}}
+      - name: pace_min_per_mile
+        description: Total minutes / total miles in the cell.
+        data_tests:
+          - dbt_utils.accepted_range: {arguments: {min_value: 0, max_value: 60}}
+
+  - name: bi_daily_trips
+    description: One row per pickup day with volume and typical ride.
+    config: {tags: ["bi"]}
+    columns:
+      - name: pickup_date
+        data_tests: [not_null, unique]
+      - name: trips
+        data_tests:
+          - not_null
+          - dbt_utils.accepted_range: {arguments: {min_value: 1}}
+
+  - name: bi_pickup_zones
+    description: Trips and typical ride per pickup zone and month.
+    config: {tags: ["bi"]}
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [source_month, pickup_location_id]
+    columns:
+      - name: pickup_location_id
+        data_tests:
+          - not_null
+          - dbt_utils.accepted_range: {arguments: {min_value: 1, max_value: 263}}
+      - name: is_airport
+        data_tests: [not_null]
+
+unit_tests:
+  - name: hourly_pace_is_total_minutes_over_total_miles
+    description: A 10-mile/20-min trip and a 1-mile/10-min trip give 30/11, not avg(2, 10).
+    model: bi_hourly_demand
+    given:
+      - input: ref('trip_features')
+        rows:
+          - {source_month: "2025-01-01", pickup_day_of_week: 3, pickup_hour: 8, trip_distance: 10.0, duration_min: 20.0}
+          - {source_month: "2025-01-01", pickup_day_of_week: 3, pickup_hour: 8, trip_distance: 1.0, duration_min: 10.0}
+    expect:
+      rows:
+        - {pickup_day_of_week: 3, pickup_hour: 8, trips: 2, pace_min_per_mile: 2.727272727272727}

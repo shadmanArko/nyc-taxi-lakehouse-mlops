@@ -188,3 +188,34 @@ def test_repo_sample_request_is_a_valid_contract_payload(client: TestClient) -> 
 
     sample = json.loads((Path(__file__).parents[3] / "sample-request.json").read_text())
     assert client.post("/predict", json=sample).status_code == 200
+
+
+# --- portal snapshot ------------------------------------------------------------
+
+
+def test_portal_is_503_until_a_snapshot_is_published(no_model_client: TestClient) -> None:
+    assert no_model_client.get("/portal").status_code == 503
+
+
+def test_portal_serves_and_caches_the_latest_snapshot(tmp_path: Any) -> None:
+    from taxi_api.model_manager import ModelManager
+    from taxi_api.portal import PortalStore
+    from taxi_api.predictor import ModelRef
+
+    published = {"run": ("run-1", {"snapshot_version": 1, "ml": {"status": "ok"}})}
+    store = PortalStore(tmp_path, fetch=lambda: published["run"])
+    manager = ModelManager(ModelRef("m", "champion"), lambda _: "1", lambda *_: FakePredictor())
+    with TestClient(create_app(settings=SETTINGS, manager=manager, portal=store)) as client:
+        import time
+
+        deadline = time.monotonic() + 5
+        while client.get("/portal").status_code != 200 and time.monotonic() < deadline:
+            time.sleep(0.05)
+        body = client.get("/portal")
+        assert body.json()["ml"] == {"status": "ok"}
+        assert "max-age" in body.headers["cache-control"]
+    # A new process (cold start, MLflow asleep) serves the cached copy at once.
+    cold = PortalStore(tmp_path, fetch=lambda: None)
+    assert cold.warm_start() is True
+    assert cold.snapshot == {"snapshot_version": 1, "ml": {"status": "ok"}}
+    assert cold.refresh() is False

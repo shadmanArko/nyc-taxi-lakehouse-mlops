@@ -1,0 +1,278 @@
+{
+  "product": "NYC Taxi Trip Time",
+  "goal": "Predict how long a New York City yellow-taxi trip will take from what is known at pickup, on a reproducible, monitored, low-cost platform that a small team can run.\n",
+  "functional": [
+    {
+      "id": "FR-01",
+      "title": "Ingest a TLC month and verify it before it lands",
+      "owner": "Data Engineering",
+      "detail": "Download the monthly file, check required columns by type family, record a manifest (SHA-256, rows), land it in the lakehouse; idempotent re-runs.",
+      "implemented_in": [
+        "jobs/ingest/src/taxi_ingest/core.py"
+      ],
+      "evidence": [
+        "jobs/ingest/tests/test_ingest.py::test_contract_violations_never_land"
+      ]
+    },
+    {
+      "id": "FR-02",
+      "title": "Clean and de-duplicate trips with documented quality rules",
+      "owner": "Data Engineering",
+      "detail": "Drop charge/reversal duplicates and voids; enforce month, duration, distance, speed and zone rules, each justified by EDA.",
+      "implemented_in": [
+        "databricks/src/taxi_pipeline/lakehouse_rules/quality.py",
+        "databricks/src/taxi_pipeline/lakehouse_rules/silver.py"
+      ],
+      "evidence": [
+        "databricks/tests/test_silver_rules.py::test_real_january_2025_matches_eda_funnel"
+      ]
+    },
+    {
+      "id": "FR-03",
+      "title": "Publish an ML feature table with an enforced contract",
+      "owner": "Data Engineering",
+      "detail": "Gold trip_features with fixed columns and types (dbt contract), mirrored in libs/contracts.",
+      "implemented_in": [
+        "transform/dbt/models/gold/trip_features.sql"
+      ],
+      "evidence": [
+        "tests/test_cross_component_contracts.py::test_dbt_gold_columns_and_types_match_python_contract"
+      ]
+    },
+    {
+      "id": "FR-04",
+      "title": "Provide BI marts for analysts",
+      "owner": "Analytics / BI",
+      "detail": "Demand and pace by weekday x hour, daily volume, pickup-zone activity; reconciled to gold.",
+      "implemented_in": [
+        "transform/dbt/models/marts/bi_hourly_demand.sql",
+        "transform/dbt/models/marts/bi_pickup_zones.sql"
+      ],
+      "evidence": [
+        "transform/dbt/tests/assert_bi_marts_reconcile_with_gold.sql"
+      ]
+    },
+    {
+      "id": "FR-05",
+      "title": "Version every dataset the model trains on",
+      "owner": "Data Engineering",
+      "detail": "Raw files in DVC; gold snapshots content-addressed by SHA-256 and verified on read.",
+      "implemented_in": [
+        "jobs/export_gold/src/taxi_export_gold/core.py",
+        "jobs/train/src/taxi_train/data.py"
+      ],
+      "evidence": [
+        "jobs/train/tests/test_train.py::test_store_snapshot_is_verified_against_its_hash"
+      ]
+    },
+    {
+      "id": "FR-06",
+      "title": "Train and compare models on an honest split",
+      "owner": "Data Science",
+      "detail": "Temporal train/validation/test split; mean baseline, RandomForest (required), Optuna-tuned LightGBM; RMSE, MAE, R2 and slice metrics.",
+      "implemented_in": [
+        "jobs/train/src/taxi_train/training.py",
+        "jobs/train/src/taxi_train/models.py"
+      ],
+      "evidence": [
+        "jobs/train/tests/test_train.py::test_temporal_split_is_ordered_and_disjoint"
+      ]
+    },
+    {
+      "id": "FR-07",
+      "title": "Promote a model only when it is genuinely better",
+      "owner": "MLOps",
+      "detail": "Champion re-scored on the challenger's test week; >= 0.5% better RMSE, no slice > 5% worse; previous champion kept for rollback.",
+      "implemented_in": [
+        "jobs/train/src/taxi_train/promote.py"
+      ],
+      "evidence": [
+        "jobs/train/tests/test_train.py::test_full_lifecycle"
+      ]
+    },
+    {
+      "id": "FR-08",
+      "title": "Predict a trip's duration through an API",
+      "owner": "Software Engineering",
+      "detail": "POST /predict with the TripFeatures contract returns minutes plus model name and version.",
+      "implemented_in": [
+        "services/api/src/taxi_api/main.py"
+      ],
+      "evidence": [
+        "services/api/tests/test_model_serving.py::test_serves_the_registry_champion_end_to_end"
+      ]
+    },
+    {
+      "id": "FR-09",
+      "title": "Let anyone try it in a web page, with zone names",
+      "owner": "Software Engineering",
+      "detail": "Form with pickup/dropoff zones by name, distance and NYC time; shows the estimate and model version.",
+      "implemented_in": [
+        "services/web/site/index.html",
+        "services/api/src/taxi_api/zones.py"
+      ],
+      "evidence": [
+        "services/api/tests/test_api.py::test_zones_lists_named_zones_without_unknowns"
+      ]
+    },
+    {
+      "id": "FR-10",
+      "title": "Run the whole loop automatically every month",
+      "owner": "MLOps",
+      "detail": "Ingest -> lakehouse -> gold snapshot -> asset event -> train -> gate -> portal snapshot, on a timer.",
+      "implemented_in": [
+        "orchestration/airflow/dags/taxi_monthly_refresh.py",
+        "orchestration/airflow/dags/taxi_train_and_promote.py"
+      ],
+      "evidence": [
+        "orchestration/airflow/tests/test_dags.py::test_refresh_announces_the_gold_asset_that_schedules_training"
+      ]
+    },
+    {
+      "id": "FR-11",
+      "title": "Detect data and model drift",
+      "owner": "MLOps",
+      "detail": "PSI per feature and on the target, champion RMSE on the newer month, retraining recommendation.",
+      "implemented_in": [
+        "jobs/train/src/taxi_train/monitor.py",
+        "orchestration/airflow/dags/taxi_train_and_promote.py"
+      ],
+      "evidence": [
+        "jobs/train/tests/test_monitor.py::test_report_flags_drift_and_degradation",
+        "orchestration/airflow/tests/test_dags.py::test_monitoring_and_portal_run_whatever_the_gate_decides"
+      ]
+    },
+    {
+      "id": "FR-12",
+      "title": "Show every department's work in one portal",
+      "owner": "Product",
+      "detail": "Overview for the owner, one section per department, live numbers from the pipeline.",
+      "implemented_in": [
+        "services/web/site/portal.js",
+        "services/api/src/taxi_api/portal.py",
+        "jobs/portal/src/taxi_portal/snapshot.py"
+      ],
+      "evidence": [
+        "jobs/portal/tests/test_portal.py::test_snapshot_has_every_portal_section",
+        "services/api/tests/test_api.py::test_portal_serves_and_caches_the_latest_snapshot"
+      ]
+    }
+  ],
+  "non_functional": [
+    {
+      "id": "NFR-01",
+      "category": "Accuracy",
+      "title": "Beat a naive baseline by a wide margin",
+      "detail": "Test-week RMSE well below the mean baseline (target < 50% of baseline).",
+      "measured": "LightGBM 4.29 min vs baseline 11.06 min (39%).",
+      "evidence": [
+        "docs/adr/0008-model-training-evaluation-and-promotion.md"
+      ]
+    },
+    {
+      "id": "NFR-02",
+      "category": "Latency",
+      "title": "Fast predictions, acceptable cold start",
+      "detail": "Warm prediction under 100 ms; first request after idle under 10 s.",
+      "measured": "~10 ms warm, 3.3-3.5 s cold (laptop), ~3.9 s on the server.",
+      "evidence": [
+        "docs/adr/0010-scale-to-zero.md"
+      ]
+    },
+    {
+      "id": "NFR-03",
+      "category": "Cost",
+      "title": "Near-zero resources while idle",
+      "detail": "Compute containers stopped when unused; only a small gateway stays on.",
+      "measured": "Idle footprint ~100 MB (gateway) + object storage.",
+      "evidence": [
+        "infra/gateway/compose.yaml"
+      ]
+    },
+    {
+      "id": "NFR-04",
+      "category": "Reproducibility",
+      "title": "Any model can be traced to its exact data and code",
+      "detail": "Locked dependencies, digest-pinned images, snapshot SHA-256 and git commit on every MLflow run.",
+      "evidence": [
+        "jobs/train/tests/test_train.py::test_full_lifecycle"
+      ]
+    },
+    {
+      "id": "NFR-05",
+      "category": "Data quality",
+      "title": "Bad data is stopped, not modelled",
+      "detail": "Raw contract at ingestion, quality rules in silver, dbt tests on gold and marts.",
+      "evidence": [
+        "databricks/tests/test_silver_rules.py::test_every_drop_rule_rejects_at_least_one_fixture_row"
+      ]
+    },
+    {
+      "id": "NFR-06",
+      "category": "Security",
+      "title": "No secrets in code, least privilege everywhere",
+      "detail": "Secret scanning on every commit and full history in CI; file-based secrets; non-root, read-only containers; socket proxy for Docker.",
+      "evidence": [
+        ".github/workflows/ci.yml",
+        "infra/gateway/socket-proxy.haproxy.cfg"
+      ]
+    },
+    {
+      "id": "NFR-07",
+      "category": "Security",
+      "title": "Known vulnerabilities blocked before release",
+      "detail": "Every image scanned; fixable high/critical CVEs fail CI; security updates refreshed at least daily.",
+      "evidence": [
+        ".github/workflows/ci.yml"
+      ]
+    },
+    {
+      "id": "NFR-08",
+      "category": "Abuse protection",
+      "title": "The public site cannot be abused easily",
+      "detail": "Route allow-list, per-client rate limits, 2 KB bodies, strict security headers.",
+      "evidence": [
+        "services/web/nginx.conf"
+      ]
+    },
+    {
+      "id": "NFR-09",
+      "category": "Reliability",
+      "title": "Keep serving when dependencies are down",
+      "detail": "API serves its cached model when MLflow is unreachable; failed model loads never replace a working model.",
+      "evidence": [
+        "services/api/tests/test_model_serving.py::test_cold_start_serves_from_cache_while_registry_is_down"
+      ]
+    },
+    {
+      "id": "NFR-10",
+      "category": "Maintainability",
+      "title": "Loosely coupled components with explicit contracts",
+      "detail": "Components share only versioned schemas, table contracts and registry aliases; each can be replaced alone.",
+      "evidence": [
+        "docs/adr/0002-monorepo-with-contract-based-coupling.md"
+      ]
+    },
+    {
+      "id": "NFR-11",
+      "category": "Quality gates",
+      "title": "Every change is tested before it can ship",
+      "detail": "Hooks, strict typing, >= 85% coverage, dbt tests, DAG tests, image smoke tests; CD only from green main.",
+      "evidence": [
+        ".github/workflows/cd.yml"
+      ]
+    },
+    {
+      "id": "NFR-12",
+      "category": "Operability",
+      "title": "Old artifacts do not pile up",
+      "detail": "Weekly clean-up keeps the newest 10 tagged images per package in GHCR (with their untagged child manifests) and, on the server, every image in use plus the previous release.",
+      "measured": "GHCR keeps 10 per image; server keeps in-use + 2 newest per taxi-* repository.",
+      "evidence": [
+        ".github/workflows/cleanup-images.yml",
+        "tests/test_ghcr_cleanup.py::test_keeps_newest_tagged_images_with_their_children",
+        "infra/server/systemd/taxi-image-prune.timer"
+      ]
+    }
+  ]
+}

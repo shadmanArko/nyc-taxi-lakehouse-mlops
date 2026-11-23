@@ -16,17 +16,17 @@ and serve predictions with FastAPI.
 | 6 | FastAPI app with a `/predict` endpoint | `services/api` serving the MLflow champion, hot reload | Done (Phase 5) |
 | 7 | Run the API locally (uvicorn or Docker) | `make up` (Docker, hardened) | Done (Phase 1) |
 | 8 | Send a sample request | `sample-request.json` + `curl` (README); answer 20.99 min from model v2 | Done (Phase 5) |
-| 9 | Document RMSE and follow-up ideas in the README | RMSE in the README (Phase 4); follow-up ideas in Phase 7 | RMSE done |
+| 9 | Document RMSE and follow-up ideas in the README | RMSE and the "With more time" list in the README; [model card](model-card.md) | Done (Phase 7) |
 
 ## Stretch
 
 | Stretch goal | Where | Status |
 |---|---|---|
-| Tests for pipeline, model, API | pytest (API + contracts now), dbt tests, model tests | Started (Phase 1) |
+| Tests for pipeline, model, API | pytest across every component (≥ 85% coverage gate), dbt data and unit tests, DAG tests, image smoke tests | Done (Phases 1-7) |
 | Hyperparameter tuning with GridSearchCV or Optuna | Optuna (TPE, 30 trials) tuning LightGBM on the validation week | Done (Phase 4) |
 | Compare tuned vs baseline and judge whether it was worth it | Tuned LightGBM 4.29 vs RandomForest 4.52 min: 5% better and better on every slice; worth it (training ~30 min on a laptop) | Done (Phase 4) |
 
 ## Questions to answer
 
-1. What is the RMSE of your final model?
-2. What would you do differently if you had more time?
+1. What is the RMSE of your final model? **4.29 minutes** (LightGBM, held-out last week of January 2025); the required RandomForest scores 4.52. See the README.
+2. What would you do differently if you had more time? See ["With more time"](../README.md#with-more-time) in the README.

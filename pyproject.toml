@@ -76,9 +76,12 @@ select = [
 # S608: tests and dev tools build SQL from trusted constants (rule definitions, fixed names).
 "**/tests/**" = ["S101", "ARG001", "ARG002", "S608"]
 "tools/**" = ["S608"]
+# SQL text is built only from identifiers checked by _ident() and a regex-checked month;
+# the GitHub URL is checked to be https://api.github.com/ before urlopen.
+"jobs/portal/src/taxi_portal/snapshot.py" = ["S608", "S310"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["taxi_contracts", "taxi_api", "taxi_ingest", "taxi_export_gold", "taxi_features", "taxi_train", "lakehouse_rules", "conftest"]
+known-first-party = ["taxi_contracts", "taxi_api", "taxi_ingest", "taxi_export_gold", "taxi_features", "taxi_train", "taxi_portal", "lakehouse_rules", "conftest", "test_train"]
 
 # --------------------------------------------------------------------------- #
 # Mypy: strict type checking                                                   #
@@ -105,9 +108,11 @@ mypy_path = [
     "jobs/ingest/src",
     "jobs/export_gold/src",
     "jobs/train/src",
+    "jobs/portal/src",
     "libs/features/src",
     "databricks/src/taxi_pipeline",
     "databricks/tests",
+    "jobs/train/tests",
 ]
 
 [[tool.mypy.overrides]]
@@ -128,7 +133,7 @@ warn_required_dynamic_aliases = true
 # --------------------------------------------------------------------------- #
 [tool.pytest.ini_options]
 testpaths = ["libs", "services", "jobs", "databricks/tests", "tests"]
-pythonpath = ["databricks/src/taxi_pipeline", "databricks/tests"]
+pythonpath = ["databricks/src/taxi_pipeline", "databricks/tests", "jobs/train/tests"]
 addopts = [
     "--import-mode=importlib",
     "--strict-markers",
@@ -159,6 +164,7 @@ source = [
     "taxi_export_gold",
     "taxi_features",
     "taxi_train",
+    "taxi_portal",
     "lakehouse_rules",
 ]
 

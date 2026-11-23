@@ -1,6 +1,11 @@
 """Train a challenger on the newest gold snapshot, then run the promotion gate.
 
-    resolve_month -> train_challenger -> promotion_gate
+    resolve_month -> train_challenger -> promotion_gate -> monitor_drift
+                                                        -> publish_portal_snapshot
+
+Monitoring compares the new month with the month before it (PSI per feature and the
+champion's RMSE on the new month). The portal snapshot then publishes every department's
+numbers for the web UI. Both run whatever the gate decided (``all_done``).
 
 Scheduled by data, not by time: it runs whenever ``taxi_monthly_refresh`` publishes a
 gold snapshot (asset event on GOLD_SNAPSHOTS, carrying the month). It can also be
@@ -16,6 +21,7 @@ from datetime import UTC, datetime, timedelta
 
 from airflow.providers.standard.operators.bash import BashOperator
 from airflow.sdk import DAG, Param, task
+from airflow.task.trigger_rule import TriggerRule
 from common.assets import GOLD_SNAPSHOTS
 
 JOBS_BIN = "/opt/taxi-jobs/bin"
@@ -25,7 +31,9 @@ TUNE_TRIALS = int(os.environ.get("TAXI_TUNE_TRIALS", "20"))
 MONTH_RE = re.compile(r"^20\d{2}-(0[1-9]|1[0-2])$")
 NOT_PROMOTED_EXIT_CODE = 3
 
+
 MONTH = "{{ ti.xcom_pull(task_ids='resolve_month') }}"
+PREVIOUS_MONTH = "{{ ti.xcom_pull(task_ids='previous_month') }}"
 JOB_ENV = {
     "MLFLOW_TRACKING_URI": MLFLOW_URI,
     "MLFLOW_DISABLE_AGENT_HINT": "1",
@@ -34,6 +42,23 @@ JOB_ENV = {
     "TAXI_S3_ENDPOINT_URL": "{{ conn.taxi_storage.extra_dejson.endpoint_url }}",
     "TAXI_SNAPSHOT_BUCKET": SNAPSHOT_BUCKET,
 }
+PORTAL_ENV = {
+    "MLFLOW_TRACKING_URI": MLFLOW_URI,
+    "MLFLOW_DISABLE_AGENT_HINT": "1",
+    "DATABRICKS_HOST": "{{ conn.databricks_default.host }}",
+    "DATABRICKS_TOKEN": "{{ conn.databricks_default.password }}",
+    "DATABRICKS_WAREHOUSE_ID": "{{ conn.databricks_default.extra_dejson.warehouse_id }}",
+    # TAXI_CATALOG / TAXI_*_SCHEMA / TAXI_PIPELINE_NAME come from the worker's environment
+    # (append_env), as they do for the refresh DAG.
+}
+
+
+def month_shift(month: str, months: int) -> str:
+    """``month_shift("2026-01", -1) == "2025-12"``."""
+    year, mon = (int(x) for x in month.split("-"))
+    index = year * 12 + (mon - 1) + months
+    return f"{index // 12:04d}-{index % 12 + 1:02d}"
+
 
 with DAG(
     dag_id="taxi_train_and_promote",
@@ -96,4 +121,34 @@ with DAG(
         retries=0,  # a rejection is a decision, not a transient failure
     )
 
-    resolve_month() >> train >> gate
+    @task
+    def previous_month(month: str) -> str:
+        """The month the drift report compares against."""
+        return month_shift(month, -1)
+
+    monitor = BashOperator(
+        task_id="monitor_drift",
+        doc_md="PSI drift (previous month -> new month) + champion RMSE on the new month.",
+        bash_command=(
+            f"{JOBS_BIN}/taxi-monitor --reference-month {PREVIOUS_MONTH} --current-month {MONTH}"
+        ),
+        env=JOB_ENV,
+        append_env=True,
+        trigger_rule=TriggerRule.ALL_DONE,
+        execution_timeout=timedelta(minutes=30),
+    )
+
+    portal = BashOperator(
+        task_id="publish_portal_snapshot",
+        doc_md="Collect every department's numbers and publish them for the web portal.",
+        bash_command=f"{JOBS_BIN}/taxi-portal-snapshot",
+        env=PORTAL_ENV,
+        append_env=True,
+        trigger_rule=TriggerRule.ALL_DONE,
+        execution_timeout=timedelta(minutes=20),
+    )
+
+    month = resolve_month()
+    month >> train >> gate
+    gate >> monitor >> portal
+    previous_month(month) >> monitor

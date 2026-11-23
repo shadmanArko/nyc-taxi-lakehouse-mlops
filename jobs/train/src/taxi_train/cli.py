@@ -89,3 +89,29 @@ def promote_main(argv: Sequence[str] | None = None) -> int:
 
 if __name__ == "__main__":  # pragma: no cover
     sys.exit(train_main())
+
+
+def _load_month(month: str, path: Path | None, bucket: str) -> Snapshot:  # pragma: no cover
+    return _load(
+        argparse.Namespace(month=month, snapshot_path=path, snapshot_sha256=None, bucket=bucket)
+    )
+
+
+def monitor_main(argv: Sequence[str] | None = None) -> int:
+    """``taxi-monitor --reference-month 2025-01 --current-month 2025-02``."""
+    from taxi_train.monitor_run import run_monitoring
+
+    parser = argparse.ArgumentParser(prog="taxi-monitor", description="Drift report")
+    parser.add_argument("--reference-month", required=True, help="training month (YYYY-MM)")
+    parser.add_argument("--current-month", required=True, help="newer month (YYYY-MM)")
+    parser.add_argument("--reference-path", type=Path, help="local parquet instead of the store")
+    parser.add_argument("--current-path", type=Path, help="local parquet instead of the store")
+    parser.add_argument("--bucket", default=os.environ.get("TAXI_SNAPSHOT_BUCKET", "taxi-dvc"))
+    parser.add_argument("--no-model", action="store_true", help="data drift only")
+    args = parser.parse_args(argv)
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
+    reference = _load_month(args.reference_month, args.reference_path, args.bucket)
+    current = _load_month(args.current_month, args.current_path, args.bucket)
+    report = run_monitoring(reference, current, with_model=not args.no_model)
+    print(json.dumps(report.to_dict(), indent=2))
+    return 0

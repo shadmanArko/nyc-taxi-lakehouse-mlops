@@ -1,0 +1,17 @@
+[project]
+name = "taxi-portal"
+version = "0.1.0"
+description = "Collect every department's live numbers into one portal snapshot"
+requires-python = ">=3.13,<3.14"
+dependencies = [
+    "databricks-sdk>=0.169",
+    "databricks-sql-connector>=4.9",
+    "mlflow-skinny>=3.18",
+]
+
+[project.scripts]
+taxi-portal-snapshot = "taxi_portal.cli:main"
+
+[build-system]
+requires = ["uv_build>=0.13.0,<0.14"]
+build-backend = "uv_build"

@@ -30,6 +30,7 @@ from pydantic import BaseModel
 from taxi_api import __version__
 from taxi_api.config import Settings, get_settings
 from taxi_api.model_manager import ModelManager
+from taxi_api.portal import PortalStore
 from taxi_api.predictor import ModelCache, ModelRef, Predictor
 from taxi_api.zones import Zone, load_zones
 from taxi_contracts import CONTRACT_VERSION, PredictionResponse, TripFeatures
@@ -67,8 +68,10 @@ def configure_logging(level: str) -> None:
     logger.setLevel(level)
 
 
-async def keep_model_fresh(app: FastAPI, manager: ModelManager, interval: float) -> None:
-    """Background loop: (re)load the alias's model; never crash the API over it."""
+async def keep_model_fresh(
+    app: FastAPI, manager: ModelManager, interval: float, portal: PortalStore | None = None
+) -> None:
+    """Background loop: (re)load the alias's model and the portal snapshot; never crash."""
     while True:
         try:
             if await asyncio.to_thread(manager.refresh):
@@ -78,6 +81,11 @@ async def keep_model_fresh(app: FastAPI, manager: ModelManager, interval: float)
                 "model refresh failed; still serving %s",
                 getattr(manager.current, "model_version", "nothing"),
             )
+        if portal is not None:
+            try:
+                await asyncio.to_thread(portal.refresh)
+            except Exception:
+                logger.exception("portal snapshot refresh failed; keeping the last one")
         await asyncio.sleep(interval)
 
 
@@ -117,8 +125,9 @@ def create_app(
     predictor: Predictor | None = None,
     settings: Settings | None = None,
     manager: ModelManager | None = None,
+    portal: PortalStore | None = None,
 ) -> FastAPI:
-    """Build the app. Inject ``predictor``/``manager``/``settings`` in tests."""
+    """Build the app. Inject ``predictor``/``manager``/``portal``/``settings`` in tests."""
     resolved = settings if settings is not None else get_settings()
 
     @asynccontextmanager
@@ -132,6 +141,15 @@ def create_app(
             if live is None and resolved.model_uri:
                 cache = ModelCache(resolved.model_cache_dir) if resolved.model_cache_dir else None
                 live = ModelManager(ModelRef.parse(resolved.model_uri), cache=cache)
+            store = portal
+            if store is None and resolved.model_uri:
+                store = PortalStore(resolved.model_cache_dir)
+            if store is not None:
+                app.state.portal = store
+                try:
+                    await asyncio.to_thread(store.warm_start)
+                except Exception:
+                    logger.exception("warm start of the portal snapshot failed")
             if live is not None:
                 # Load the locally cached model *before* the app starts serving (and so
                 # before /health turns healthy). Scale-to-zero releases traffic on
@@ -142,7 +160,7 @@ def create_app(
                 except Exception:
                     logger.exception("warm start from the local model cache failed")
                 refresher = asyncio.create_task(
-                    keep_model_fresh(app, live, resolved.model_refresh_seconds)
+                    keep_model_fresh(app, live, resolved.model_refresh_seconds, store)
                 )
         yield
         if refresher is not None:
@@ -157,11 +175,28 @@ def create_app(
         lifespan=lifespan,
     )
     app.state.predictor = None  # defined even before lifespan runs
+    app.state.portal = None
     app.add_exception_handler(RequestValidationError, validation_error_handler)
 
     @app.get("/health", tags=["ops"])
     def health() -> HealthResponse:
         return HealthResponse()
+
+    @app.get(
+        "/portal",
+        tags=["portal"],
+        responses={503: {"model": ErrorResponse, "description": "No snapshot published yet"}},
+    )
+    def portal_snapshot(request: Request, response: Response) -> dict[str, Any]:
+        """Every department's live numbers (read-only, published by the monthly run)."""
+        store: PortalStore | None = request.app.state.portal
+        if store is None or store.snapshot is None:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="No portal snapshot has been published yet.",
+            )
+        response.headers["Cache-Control"] = "public, max-age=300"
+        return store.snapshot
 
     @app.get("/zones", tags=["reference"])
     def zones(response: Response) -> list[Zone]:

@@ -18,6 +18,7 @@ dependencies = [
 [project.scripts]
 taxi-train = "taxi_train.cli:train_main"
 taxi-promote = "taxi_train.cli:promote_main"
+taxi-monitor = "taxi_train.cli:monitor_main"
 
 [tool.uv.sources]
 taxi-contracts = { workspace = true }

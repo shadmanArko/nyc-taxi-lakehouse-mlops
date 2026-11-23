@@ -1,0 +1,49 @@
+# Weekly image retention for GHCR: keep the newest 10 tagged images per package (plus
+# their untagged child manifests) and always `main`; delete everything older.
+# The selection logic lives in tools/ghcr_cleanup.py and is unit-tested
+# (tests/test_ghcr_cleanup.py). Run by hand with dry_run to preview.
+name: Cleanup images
+
+on:
+  schedule:
+    - cron: "23 4 * * 1"   # Mondays 04:23 UTC
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: List what would be deleted, delete nothing
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cleanup-images
+  cancel-in-progress: false
+
+jobs:
+  prune:
+    name: Prune ${{ matrix.package }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      packages: write        # delete package versions this repository published
+    strategy:
+      fail-fast: false
+      matrix:
+        package: [taxi-api, taxi-web, taxi-gateway, taxi-mlflow, taxi-airflow]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Delete versions beyond the newest 10
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OWNER: ${{ github.repository_owner }}
+          PACKAGE: ${{ matrix.package }}
+          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
+        run: |
+          args=(--owner "$OWNER" --package "$PACKAGE" --keep 10)
+          if [[ "$DRY_RUN" == "true" ]]; then args+=(--dry-run); fi
+          python3 tools/ghcr_cleanup.py "${args[@]}"

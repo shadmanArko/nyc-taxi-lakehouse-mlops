@@ -7,7 +7,8 @@ COMPOSE := docker compose -f infra/compose/compose.yaml
 .PHONY: help setup hooks lint format typecheck test check eda data-pull ingest ingest-upload \
 	dbt-ci lakehouse-local bundle-validate bundle-deploy bundle-run mlflow-up mlflow-down train promote \
 	airflow-test airflow-bootstrap \
-	airflow-up airflow-down airflow-run image up gateway-up gateway-down wake down logs smoke clean
+	airflow-up airflow-down airflow-run image up gateway-up gateway-down wake down logs smoke clean \
+	monitor portal-snapshot portal-static docker-clean
 
 help: ## List available targets
 	@grep -hE '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}'
@@ -105,6 +106,29 @@ promote: ## Evaluation gate: promote @challenger to @champion if it is better
 	$(TRAIN_ENV) uv run taxi-promote --month $(MONTH)
 
 # --------------------------------------------------------------------------- #
+# Monitoring + portal (Phase 7)                                                #
+# --------------------------------------------------------------------------- #
+monitor: ## Drift report: REF month vs MONTH (PSI + champion RMSE), logged to MLflow
+	$(TRAIN_ENV) uv run taxi-monitor --reference-month $(REF) --current-month $(MONTH)
+
+# Databricks: CLI profile `taxi`; the warehouse id comes from the environment. For the dev
+# bundle pass its prefix, e.g. SCHEMA_PREFIX=dev_<user>_ PIPELINE_NAME="[dev <user>] taxi-medallion".
+REF ?= 2025-01
+WAREHOUSE_ID ?= $(DATABRICKS_WAREHOUSE_ID)
+SCHEMA_PREFIX ?=
+PIPELINE_NAME ?= taxi-medallion
+DRY_RUN ?= 0
+
+portal-snapshot: ## Collect every department's numbers and publish the portal snapshot
+	DATABRICKS_CONFIG_PROFILE=taxi DATABRICKS_WAREHOUSE_ID=$(WAREHOUSE_ID) \
+		MLFLOW_DISABLE_AGENT_HINT=1 MLFLOW_TRACKING_URI=$(MLFLOW_URI) uv run taxi-portal-snapshot \
+		--bronze-schema $(SCHEMA_PREFIX)taxi_bronze --silver-schema $(SCHEMA_PREFIX)taxi_silver \
+		--gold-schema $(SCHEMA_PREFIX)taxi_gold --pipeline-name "$(PIPELINE_NAME)"
+
+portal-static: ## Regenerate the portal's static data (requirements register, model card)
+	uv run python tools/build_portal_static.py
+
+# --------------------------------------------------------------------------- #
 # Orchestration (Phase 3)                                                      #
 # --------------------------------------------------------------------------- #
 AIRFLOW := docker compose -f orchestration/airflow/compose.yaml
@@ -159,6 +183,9 @@ smoke: ## Hit the running API: health, ready (model version), one prediction
 	curl -sS http://127.0.0.1:$${API_HOST_PORT:-8000}/ready && echo
 	curl -sS -X POST http://127.0.0.1:$${API_HOST_PORT:-8000}/predict \
 		-H 'Content-Type: application/json' -d @sample-request.json && echo
+
+docker-clean: ## Free disk: old taxi-* images (keeps in-use + 2 newest), dangling layers, old cache
+	DRY_RUN=$(DRY_RUN) bash infra/server/prune-images.sh
 
 clean: ## Remove caches and build output
 	rm -rf .pytest_cache .mypy_cache .ruff_cache .coverage coverage.xml junit.xml htmlcov

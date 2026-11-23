@@ -38,14 +38,16 @@ flowchart LR
         ML[(MLflow<br/>tracking + registry)]
         API[FastAPI<br/>/predict]
         WEB[Web UI]
-        MON[Drift + quality<br/>monitoring]
+        MON[Drift monitoring<br/>PSI + live RMSE]
+        PS[Portal snapshot<br/>every department]
     end
 
     TLC --> ING -- push --> L
     G -- content-addressed<br/>gold snapshot --> OS
     OS --> TR --> ML
     ML -- champion alias --> API --> WEB
-    API --> MON
+    OS --> MON --> ML
+    ML --> PS --> API
     AF -. triggers .-> DBX
     AF -. triggers .-> TR
     WEB -- public HTTPS link --> U((Users))
@@ -71,7 +73,10 @@ piece can be rewritten or replaced without touching the others. Details:
 | Experiment tracking & registry | MLflow 3 on the self-hosted server (Postgres, artifacts in SeaweedFS via proxy, skops model format, registry aliases) |
 | Model evaluation gates | Champion re-scored on the challenger's test week; ≥ 0.5% better RMSE, no slice > 5% worse |
 | Serving | FastAPI serving the MLflow `@champion` (hot reload), nginx UI + reverse proxy with rate limits, Docker |
-| Monitoring | Data and prediction drift reports |
+| Monitoring | PSI drift per feature and on the target + champion RMSE on each new month, logged to MLflow; retrain advice at significant drift or > 10% worse RMSE |
+| Analytics / BI | dbt marts on gold (hourly demand and pace, daily trips, pickup zones), reconciled with gold by a test |
+| Portal | One page per department (requirements, data, analytics, ML, MLOps, monitoring, DevOps, architecture) from a monthly published snapshot; hand-built SVG charts, strict CSP ([ADR-0011](docs/adr/0011-portal-monitoring-and-retention.md)) |
+| Retention | Weekly GHCR clean-up (newest 10 per image), weekly server prune (in use + previous release), `make docker-clean` |
 | Code quality | uv, Ruff, mypy `--strict`, pytest, pre-commit, hadolint, actionlint |
 | Security | gitleaks (commit + full history), Grype image scan, dependency review, SHA-pinned actions, Dependabot |
 | CI/CD | GitHub Actions: CI on every push/PR; CD publishes signed amd64 images (SBOM + provenance) to GHCR for green `main` |
@@ -85,7 +90,8 @@ piece can be rewritten or replaced without touching the others. Details:
 ├── libs/contracts/        # versioned schemas shared by all components (the only shared code)
 ├── jobs/ingest/           # TLC download, raw-contract check, manifest, upload to landing volume
 ├── jobs/export_gold/      # gold month -> contract check -> content-addressed snapshot
-├── jobs/train/            # training, Optuna tuning, MLflow logging, promotion gate
+├── jobs/train/            # training, Optuna tuning, MLflow logging, promotion gate, drift monitor
+├── jobs/portal/           # collects every department's numbers -> portal snapshot in MLflow
 ├── libs/features/         # feature pipeline shipped inside the model (no train/serve skew)
 ├── databricks.yml         # Databricks bundle: schemas, landing volume, pipeline, job
 ├── databricks/            # Lakeflow pipeline (bronze, silver) + portable quality rules + tests
@@ -95,12 +101,11 @@ piece can be rewritten or replaced without touching the others. Details:
 ├── services/api/          # FastAPI: serves the MLflow @champion, hot reload, /zones
 ├── services/web/          # static UI + nginx reverse proxy (allow-list, rate limits, CSP)
 ├── infra/                 # serving (compose/), gateway (gateway/), storage/, mlflow/, server overrides (server/)
-├── tools/                 # dev tools, e.g. the local DuckDB lakehouse run
+├── tools/                 # dev tools: local DuckDB lakehouse run, portal static data, GHCR clean-up
 ├── tests/                 # cross-component contract tests
-├── docs/                  # architecture, ADRs, deployment, assignment brief
+├── docs/                  # architecture, ADRs, deployment, requirements register, model card
 ├── .github/               # CI workflow, Dependabot, PR template
 ├── orchestration/airflow/ # Airflow 3 DAG, image (jobs in their own venv), local stack, DAG tests
-├── jobs/training/         # Phase 4: training + evaluation job         (planned)
 ```
 
 ## Roadmap
@@ -111,7 +116,7 @@ piece can be rewritten or replaced without touching the others. Details:
 - [x] **Phase 4 - ML:** RandomForest + Optuna-tuned LightGBM on a temporal split, MLflow tracking with full data lineage, slice-aware promotion gate via registry aliases, asset-triggered retraining ([ADR-0008](docs/adr/0008-model-training-evaluation-and-promotion.md))
 - [x] **Phase 5 - Serving + UI:** API serves the registry `@champion` with hot reload; web UI with zone names behind a rate-limited reverse proxy; `sample-request.json` ([ADR-0009](docs/adr/0009-serving-champion-with-hot-reload-and-proxy.md))
 - [x] **Phase 6 - CD + scale-to-zero:** signed images to GHCR from green `main`; Sablier wakes web/api/MLflow on demand (3.5 s cold start) and sleeps them after 15 min; monthly timer for Airflow; Tailscale Funnel link ([ADR-0010](docs/adr/0010-scale-to-zero.md)). _Server rollout pending operator approval._
-- [ ] **Phase 7 - Monitoring + docs:** drift reports, model card, final write-up
+- [x] **Phase 7 - Portal, monitoring, retention:** company-style portal (overview + one page per department with live numbers), requirements register with CI-enforced traceability, BI marts, PSI drift monitoring after every training run, [model card](docs/model-card.md), automatic image clean-up ([ADR-0011](docs/adr/0011-portal-monitoring-and-retention.md)). February 2025 processed end to end: no drift, champion 5.3% worse on the new month (below the 10% retrain threshold).
 
 ## Quickstart
 
@@ -174,7 +179,17 @@ requirement maps to this repo: [docs/assignment.md](docs/assignment.md).
 | Question | Answer |
 |---|---|
 | RMSE of the final model | **4.29 minutes** on the held-out last week of January 2025 (788,828 trips): LightGBM tuned with Optuna, R² 0.849, MAE 2.58 min. The required `RandomForestRegressor` scores **4.52 min** (R² 0.833); a mean baseline scores 11.06 min. Details: [ADR-0008](docs/adr/0008-model-training-evaluation-and-promotion.md). |
-| What would you do differently with more time? | _Phase 7_ |
+| What would you do differently with more time? | See [below](#with-more-time). |
+
+## With more time
+
+1. **Better inputs.** At booking, the trip distance is not yet known; use a routed distance (e.g. OSRM) instead of the recorded one. Add weather, holidays and events, which explain much of the error on long and airport trips.
+2. **More history.** Train on a rolling 6 to 12 months, so the model learns seasons, and weight recent months more.
+3. **Uncertainty.** Predict a range (quantile LightGBM or conformal intervals), not just one number.
+4. **Live monitoring.** Log real predictions and join them with the actual durations once the TLC publishes them. Today's monitoring compares months offline.
+5. **Safer releases.** Run the challenger in shadow mode or as a canary on real traffic before promotion, not only on the test week.
+6. **Production hosting.** Move from one home server to a managed platform with high availability, and add alerting (e.g. on drift or failed runs) on top of the dashboards.
+7. **Feature store.** Once there are several models, move shared features to a feature store with point-in-time joins.
 
 ## License
 

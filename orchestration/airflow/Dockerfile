@@ -4,7 +4,7 @@
 
 FROM ghcr.io/astral-sh/uv:0.13.9@sha256:d3b601f0c7b118bc1753febf7c41cc80981df678445e0254284eecf84db79a7d AS uv
 
-# ---------- jobs: ingest, export-gold, train - isolated from Airflow ----------
+# ---------- jobs: ingest, export-gold, train, portal - isolated from Airflow ----------
 FROM apache/airflow:slim-3.4.0-python3.13@sha256:371c258d67cd0a34bac60a28c940b65968b98dff2554e12b981f1df75b4be570 AS jobs
 # Build-only stage (never run), so root is fine here; the runtime stage ends as uid 50000.
 # hadolint ignore=DL3002
@@ -19,9 +19,11 @@ COPY libs/features libs/features
 COPY jobs/ingest jobs/ingest
 COPY jobs/export_gold jobs/export_gold
 COPY jobs/train jobs/train
+COPY jobs/portal jobs/portal
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev --no-editable \
-        --package taxi-ingest --package taxi-export-gold --package taxi-train
+        --package taxi-ingest --package taxi-export-gold --package taxi-train \
+        --package taxi-portal
 
 # ---------- runtime ----------
 FROM apache/airflow:slim-3.4.0-python3.13@sha256:371c258d67cd0a34bac60a28c940b65968b98dff2554e12b981f1df75b4be570

@@ -65,6 +65,26 @@ def test_training_dag_shape_and_gate_semantics(dagbag: DagBag) -> None:
     assert gate.retries == 0
 
 
+def test_monitoring_and_portal_run_whatever_the_gate_decides(dagbag: DagBag) -> None:
+    dag = dagbag.dags["taxi_train_and_promote"]
+    monitor = dag.get_task("monitor_drift")
+    portal = dag.get_task("publish_portal_snapshot")
+    assert {"promotion_gate", "previous_month"} <= monitor.upstream_task_ids
+    assert portal.upstream_task_ids == {"monitor_drift"}
+    assert monitor.trigger_rule == "all_done"
+    assert portal.trigger_rule == "all_done"
+
+
+@pytest.mark.parametrize(
+    ("month", "shift", "expected"),
+    [("2026-01", -1, "2025-12"), ("2025-02", -1, "2025-01"), ("2025-12", 1, "2026-01")],
+)
+def test_month_shift(month: str, shift: int, expected: str) -> None:
+    from taxi_train_and_promote import month_shift
+
+    assert month_shift(month, shift) == expected
+
+
 def test_production_schedule_is_monthly(dagbag: DagBag) -> None:
     """Default (no TAXI_DAG_SCHEDULE) is the monthly cron; local compose overrides it."""
     assert dagbag.dags["taxi_monthly_refresh"].schedule == "0 6 15 * *"

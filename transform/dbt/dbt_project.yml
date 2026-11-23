@@ -26,6 +26,8 @@ models:
     gold:
       +materialized: table
       +tags: ["gold"]
+    marts:
+      +materialized: table   # BI marts on top of gold (same schema)
 
 seeds:
   taxi:

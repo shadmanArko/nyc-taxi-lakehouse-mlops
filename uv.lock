@@ -15,6 +15,7 @@ members = [
     "taxi-export-gold",
     "taxi-features",
     "taxi-ingest",
+    "taxi-portal",
     "taxi-train",
 ]
 
@@ -3294,6 +3295,23 @@ requires-dist = [
     { name = "databricks-sdk", specifier = ">=0.169" },
     { name = "pyarrow", specifier = ">=22.0" },
     { name = "taxi-contracts", editable = "libs/contracts" },
+]
+
+[[package]]
+name = "taxi-portal"
+version = "0.1.0"
+source = { editable = "jobs/portal" }
+dependencies = [
+    { name = "databricks-sdk" },
+    { name = "databricks-sql-connector" },
+    { name = "mlflow-skinny" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "databricks-sdk", specifier = ">=0.169" },
+    { name = "databricks-sql-connector", specifier = ">=4.9" },
+    { name = "mlflow-skinny", specifier = ">=3.18" },
 ]
 
 [[package]]
