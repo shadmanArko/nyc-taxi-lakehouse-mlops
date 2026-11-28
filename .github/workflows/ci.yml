@@ -132,7 +132,7 @@ jobs:
       - if: failure()
         run: docker logs api || true
       - name: Vulnerability scan (fail on fixable high/critical)
-        uses: anchore/scan-action@27805bf3b4e84b4a5c980df22ed233c00390a439 # v7.4.2
+        uses: anchore/scan-action@11983a512817154c80a9db660c1a184be7513ed6 # v7.4.3
         with:
           image: taxi-api:ci
           severity-cutoff: high
@@ -192,7 +192,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: databricks/setup-cli@12452ad4003a2dd61d5a7cee30bc068f750a2e00 # v1.27.0
+      - uses: databricks/setup-cli@e1dad86b08f6ea07707aea128ec4bfa76af8db55 # v1.28.0
       - name: Validate (skipped without credentials, e.g. on fork PRs)
         run: |
           if [ -z "$DATABRICKS_HOST" ] || [ -z "$DATABRICKS_TOKEN" ]; then
@@ -239,7 +239,7 @@ jobs:
             'airflow version && /opt/taxi-jobs/bin/taxi-ingest --help >/dev/null \
              && /opt/taxi-jobs/bin/taxi-export-gold --help >/dev/null && test "$(id -u)" = 50000'
       - name: Vulnerability scan (fail on fixable high/critical)
-        uses: anchore/scan-action@27805bf3b4e84b4a5c980df22ed233c00390a439 # v7.4.2
+        uses: anchore/scan-action@11983a512817154c80a9db660c1a184be7513ed6 # v7.4.3
         with:
           image: taxi-airflow:ci
           severity-cutoff: high
@@ -273,7 +273,7 @@ jobs:
           docker run --rm --entrypoint sh taxi-mlflow:ci -c \
             'test "$(id -u)" = 10001 && python -c "import mlflow, psycopg2, boto3; print(mlflow.__version__)"'
       - name: Vulnerability scan (fail on fixable high/critical)
-        uses: anchore/scan-action@27805bf3b4e84b4a5c980df22ed233c00390a439 # v7.4.2
+        uses: anchore/scan-action@11983a512817154c80a9db660c1a184be7513ed6 # v7.4.3
         with:
           image: taxi-mlflow:ci
           severity-cutoff: high
@@ -317,7 +317,7 @@ jobs:
       - if: failure()
         run: docker logs web || true
       - name: Vulnerability scan (fail on fixable high/critical)
-        uses: anchore/scan-action@27805bf3b4e84b4a5c980df22ed233c00390a439 # v7.4.2
+        uses: anchore/scan-action@11983a512817154c80a9db660c1a184be7513ed6 # v7.4.3
         with:
           image: taxi-web:ci
           severity-cutoff: high
@@ -353,7 +353,7 @@ jobs:
           docker run --rm --entrypoint caddy taxi-gateway:ci list-modules | grep -q http.handlers.sablier
           test "$(docker inspect -f '{{.Config.User}}' taxi-gateway:ci)" = "10001:10001"
       - name: Vulnerability scan (fail on fixable high/critical)
-        uses: anchore/scan-action@27805bf3b4e84b4a5c980df22ed233c00390a439 # v7.4.2
+        uses: anchore/scan-action@11983a512817154c80a9db660c1a184be7513ed6 # v7.4.3
         with:
           image: taxi-gateway:ci
           severity-cutoff: high
