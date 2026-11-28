@@ -4,7 +4,7 @@
 
 # ---------- builder: resolve and install into a self-contained venv ----------
 # uv version kept equal to UV_VERSION in .github/workflows/ci.yml and the uv-lock hook rev.
-FROM ghcr.io/astral-sh/uv:0.13.9-python3.13-trixie-slim@sha256:803d2b80b6913e562837d69f037f39bfea80f51ef3f0dd0d8fdffbd95688fd6d AS builder
+FROM ghcr.io/astral-sh/uv:0.13.10-python3.13-trixie-slim@sha256:00e2b362982a5ce19eb3a51453ed76af92ccaaedccc0236fae83b27d994ae0f3 AS builder
 
 ENV UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy \
